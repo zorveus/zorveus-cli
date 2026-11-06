@@ -4,3 +4,6 @@
 *.test
 .zorveus/
 *.plan.json
+.env
+.env.*
+!.env.example
