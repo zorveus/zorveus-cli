@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "app": {
+    "id": "app_assistant",
+    "name": "Writing assistant",
+    "allowedModels": [
+      "<standard-model-id>",
+      "<premium-model-id>"
+    ]
+  },
+  "keys": [
+    {
+      "id": "key_free",
+      "name": "Free plan",
+      "routingAlias": "free",
+      "allowedModels": [
+        "<standard-model-id>"
+      ],
+      "creditMode": "enforce",
+      "overrunPolicy": "limit_output",
+      "cap": {
+        "amount": "1",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    },
+    {
+      "id": "key_pro",
+      "name": "Pro plan",
+      "routingAlias": "pro",
+      "creditMode": "enforce",
+      "overrunPolicy": "limit_output",
+      "cap": {
+        "amount": "10",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  ],
+  "routingKeys": [
+    {
+      "id": "key_router",
+      "name": "Application backend",
+      "members": [
+        "free",
+        "pro"
+      ],
+      "defaultSelector": null
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "app": {
+    "name": "Writing assistant development",
+    "allowedModels": [
+      "<standard-model-id>",
+      "<premium-model-id>"
+    ]
+  },
+  "keys": [
+    {
+      "name": "Free plan",
+      "routingAlias": "free",
+      "allowedModels": [
+        "<standard-model-id>"
+      ],
+      "creditMode": "enforce",
+      "cap": {
+        "amount": "1",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    },
+    {
+      "name": "Pro plan",
+      "routingAlias": "pro",
+      "creditMode": "enforce",
+      "cap": {
+        "amount": "10",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  ],
+  "routingKeys": [
+    {
+      "name": "Application backend",
+      "members": [
+        "free",
+        "pro"
+      ],
+      "defaultSelector": null
+    }
+  ]
+}

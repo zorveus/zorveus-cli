@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "app": {
+    "id": "app_internal",
+    "name": "Internal assistant",
+    "allowedModels": [
+      "<model-id>"
+    ]
+  },
+  "keys": [
+    {
+      "id": "key_backend",
+      "name": "Backend",
+      "routingAlias": "backend",
+      "creditMode": "enforce",
+      "cap": {
+        "amount": "100",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  ]
+}
