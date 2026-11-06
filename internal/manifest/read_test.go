@@ -30,18 +30,15 @@ func TestAcceptedFixturesAndDocumentedExamples(t *testing.T) {
 			}
 		})
 	}
-	proposal, err := os.ReadFile("../../zorveus_cli_and_manifest_proposal.md")
+	guide, err := os.ReadFile("../../examples/README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, match := range regexp.MustCompile("(?s)~~~json\\n(.*?)\\n~~~").FindAllSubmatch(proposal, -1) {
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(match[1], &fields); err != nil {
-			t.Fatal(err)
-		}
-		if fields["version"] == nil {
-			continue
-		}
+	manifests := regexp.MustCompile("(?s)```json\\n(.*?)\\n```").FindAllSubmatch(guide, -1)
+	if len(manifests) != len(examplePaths) {
+		t.Fatal("each example must have a complete manifest in the guide")
+	}
+	for _, match := range manifests {
 		if _, err := Parse(match[1]); err != nil {
 			t.Fatalf("a documented manifest was rejected: %v", err)
 		}
