@@ -8,7 +8,7 @@ Describe an app in `zorveus.json`, review the proposed changes, and apply them t
 
 You do not need Go or a source checkout to run the CLI.
 
-The installer and release files must be published to `zorveus.com` before the hosted commands below are available. See [release hosting](BUILDING.md#publish-release-files) for the files to publish.
+The hosted commands below require a published CLI release and the website download redirects. See the [release guide](docs/releasing.md) for deployment setup.
 
 ### macOS and Linux
 
@@ -44,7 +44,8 @@ Replace `v1.2.3` with the release you want to install. A failed download or chec
 Download the Windows binary in PowerShell, then verify it before installation. This example selects x86-64; replace `amd64` with `arm64` for Windows on ARM:
 
 ```powershell
-$version = (Invoke-RestMethod https://zorveus.com/cli/latest).Trim()
+Invoke-WebRequest https://zorveus.com/cli/latest -OutFile zorveus-version.txt
+$version = (Get-Content zorveus-version.txt -Raw).Trim()
 $binary = "zorveus-windows-amd64.exe"
 $releaseUrl = "https://zorveus.com/cli/$version"
 Invoke-WebRequest "$releaseUrl/$binary" -OutFile $binary
