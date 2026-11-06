@@ -4,31 +4,99 @@ Manage your Zorveus apps, inference keys, routing keys, spending limits, and pro
 
 Describe an app in `zorveus.json`, review the proposed changes, and apply them to your organization. You can also import an existing app, check for configuration drift, or prepare a separate development copy.
 
-## Build from source
+## Install
 
-With Go 1.26 or newer installed, run these commands from this repository:
+You do not need Go or a source checkout to run the CLI.
+
+The installer and release files must be published to `zorveus.com` before the hosted commands below are available. See [release hosting](BUILDING.md#publish-release-files) for the files to publish.
+
+### macOS and Linux
 
 ```sh
-go build -o bin/zorveus ./cmd/zorveus
-./bin/zorveus --help
+curl -fsSL https://zorveus.com/install.sh | sh
 ```
 
-The built executable does not need Go installed to run. Login and credential creation require an available OS credential store: Keychain on macOS, Secret Service on Linux, or Credential Manager on Windows.
+The installer detects macOS or Linux and selects the x86-64 or ARM64 binary. It verifies the download's SHA-256 checksum and installs `zorveus` into `~/.local/bin` without `sudo`. Linux binaries are built without cgo, so the installer does not depend on a distribution's package manager or choice of glibc or musl.
+
+You need `curl`, CA certificates, and either `sha256sum` or `shasum`. Other operating systems and processor architectures are not supported by the shell installer.
+
+If `zorveus` is not found after installation, add its directory to your current shell:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+zorveus --help
+```
+
+Add that `export PATH` line to your shell's startup file, such as `~/.zshrc` for zsh or `~/.bashrc` for Bash, to keep it available in new terminals.
+
+Run the installer again to update to the latest release. To inspect the script, choose a version, or change the destination, download it first:
+
+```sh
+curl -fsSL https://zorveus.com/install.sh -o install-zorveus.sh
+sh install-zorveus.sh --help
+sh install-zorveus.sh --version v1.2.3 --bin-dir "$HOME/.local/bin"
+```
+
+Replace `v1.2.3` with the release you want to install. A failed download or checksum check leaves your current executable untouched. The installer does not modify your shell configuration or saved login.
+
+### Windows
+
+Download the Windows binary in PowerShell, then verify it before installation. This example selects x86-64; replace `amd64` with `arm64` for Windows on ARM:
+
+```powershell
+$version = (Invoke-RestMethod https://zorveus.com/cli/latest).Trim()
+$binary = "zorveus-windows-amd64.exe"
+$releaseUrl = "https://zorveus.com/cli/$version"
+Invoke-WebRequest "$releaseUrl/$binary" -OutFile $binary
+Invoke-WebRequest "$releaseUrl/SHA256SUMS" -OutFile SHA256SUMS
+$checksumLine = Get-Content SHA256SUMS | Where-Object { ($_ -split '\s+')[1] -eq $binary }
+if (@($checksumLine).Count -ne 1) { throw "Missing or duplicate release checksum" }
+$expected = ($checksumLine -split '\s+')[0]
+$actual = (Get-FileHash $binary -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw "Checksum verification failed" }
+
+$installDir = Join-Path $env:LOCALAPPDATA "Zorveus\bin"
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+Copy-Item $binary (Join-Path $installDir "zorveus.exe")
+$env:Path = "$installDir;$env:Path"
+zorveus --help
+```
+
+For new terminals, add `%LOCALAPPDATA%\Zorveus\bin` to your user's `Path` through Windows Environment Variables.
+
+Login and credential creation use Keychain on macOS, Secret Service on Linux, or Credential Manager on Windows. Your credential store must be available and unlocked.
+
+To build or contribute to the CLI, see [Building Zorveus](BUILDING.md).
+
+## Your first app
+
+Follow this path to create an app and learn the main workflow:
+
+1. [Sign in](#sign-in). Choose your organization and request the permissions for the example. Confirm the account and organization with `zorveus whoami`.
+2. [Configure an app](#configure-an-app). Create `zorveus.json`, replace its contents with the example, and validate it. Expect `Valid manifest`; no remote resources have been created by these commands.
+3. [Review and apply changes](#review-and-apply-changes). Plan should propose creation of the app, inference key, cap, and router. Apply creates them and adds their IDs to the manifest.
+4. [Check the result and make an update](#check-the-result-and-make-an-update). Confirm an empty plan, then change the app name and apply the update.
+5. [Create a development copy](#create-a-development-copy). Confirm the new manifest has no resource IDs before applying it, and different IDs afterward.
+6. [Import an existing app](#import-an-existing-app). Use the app ID from your manifest and choose a new destination file.
+
+After that, try [BYOK](#bring-your-own-provider-key) and [service keys](#manage-service-keys), using the permissions included in the default login. A configured spending cap sets a limit; it does not purchase credits or send an inference request.
 
 ## Sign in
 
 ```sh
-./bin/zorveus login
-./bin/zorveus whoami
-./bin/zorveus apps list
+zorveus login
+zorveus whoami
+zorveus apps list
 ```
 
 Login opens the Zorveus dashboard, where you choose an organization and approve access. It uses `https://api.zorveus.com` and `https://app.zorveus.com` by default.
 
-The default permission is `apps:read`. To create the app, keys, cap, and router in the example below, request these permissions instead:
+By default, login requests all CLI management permissions for apps, inference connections, routing keys, spending caps, service keys, and provider credentials. These include creation, updates, credential rotation, and supported deletion or revocation operations. Choose the organization and approve access in the browser. For a local server, use `zorveus login --local`.
+
+To request fewer permissions, pass an explicit scope list. For example, to view apps only:
 
 ```sh
-./bin/zorveus login --scope "apps:read apps:create apps:rotate_secret app_connections:read app_connections:write caps:app_write routing_keys:read routing_keys:write"
+zorveus login --scope "apps:read"
 ```
 
 The CLI keeps one saved login. Signing in again replaces it. To request different permissions or switch organizations, run `login` again. Your organization role still determines which operations you can perform.
@@ -36,7 +104,7 @@ The CLI keeps one saved login. Signing in again replaces it. To request differen
 Use `login --no-browser` to print the authorization URL and open it in your preferred browser. To end the CLI session:
 
 ```sh
-./bin/zorveus logout
+zorveus logout
 ```
 
 ## Configure an app
@@ -44,8 +112,10 @@ Use `login --no-browser` to print the authorization URL and open it in your pref
 Create a starter manifest:
 
 ```sh
-./bin/zorveus init --name "Assistant"
+zorveus init --name "Assistant"
 ```
+
+`init` refuses to overwrite an existing file. For a separate exercise, use a new filename with `--config` and pass that filename to subsequent commands.
 
 The default file is `zorveus.json`. New apps allow all models with `allowedModels: ["*"]`. To select specific models, repeat `--model` when running `init`.
 
@@ -84,7 +154,7 @@ Edit the manifest to describe the resources you need. This example creates an ap
 Validate the file:
 
 ```sh
-./bin/zorveus validate
+zorveus validate
 ```
 
 `init`, `validate`, and `clone` work offline without login. Validation checks the file's structure and references; planning checks remote resources and access.
@@ -94,21 +164,52 @@ See the [manifest reference](docs/manifest-v1.md) for OAuth settings, consent de
 ## Review and apply changes
 
 ```sh
-./bin/zorveus plan --config zorveus.json --out zorveus.plan.json
+zorveus plan --config zorveus.json --out zorveus.plan.json
 ```
 
-Plan shows the proposed changes and saves them without changing remote resources. Review its output, then apply that saved plan:
+Plan shows resource blocks with `+` for additions, `~` for updates, and `-` for removals or revocations. Updates show changed fields as `old -> new` and hide unchanged fields. The summary counts planned additions, updates, and removals. Plan saves these changes without changing remote resources.
+
+Terminal output uses green, yellow, and red for these actions. Use `--no-color` or set `NO_COLOR` to disable colors. Piped output and `--json` results contain no color codes.
+
+Review the output, then apply that saved plan:
 
 ```sh
-./bin/zorveus apply --plan zorveus.plan.json --yes
-./bin/zorveus status --config zorveus.json
+zorveus apply --plan zorveus.plan.json --yes
+zorveus status --config zorveus.json
 ```
 
 Apply creates or updates the resources and writes their IDs back into your manifest. Keep those IDs when editing existing resources. Running plan again after a successful apply produces zero changes when the configuration matches.
 
 The CLI saves newly generated secrets in your OS credential store and reports their account names. Secrets do not appear in the manifest, saved plans, or command output. On macOS, use Keychain Access to find entries under `com.zorveus.cli.resources` with the reported account name.
 
-If you edit the manifest or a planned remote value changes, create a new plan before applying. Use a new `--out` filename, since plan refuses to overwrite an existing file.
+If you edit the manifest or a planned remote value changes, run `zorveus plan` again before applying. A successful plan replaces the existing plan for that manifest at the same output path. If planning fails, the previous file is preserved. Use separate `--out` filenames for different manifests.
+
+### Check the result and make an update
+
+Check that the applied configuration matches:
+
+```sh
+zorveus status --config zorveus.json --json
+zorveus plan --config zorveus.json --out check.plan.json
+```
+
+Expect `result.in_sync: true` in the status result and `No changes.` from plan. You can also check the app and its keys in the dashboard for the same organization.
+
+Next, change only `app.name` in `zorveus.json` to `Assistant renamed`. Keep all resource IDs. Inspect the difference before applying it:
+
+```sh
+zorveus status --config zorveus.json --json
+zorveus plan --config zorveus.json --out rename.plan.json
+```
+
+Status should report `in_sync: false` with the name difference. Plan should propose a name update without creating another app or rotating keys. Apply it and check again:
+
+```sh
+zorveus apply --plan rename.plan.json --yes
+zorveus status --config zorveus.json --json
+```
+
+Expect `in_sync: true` again and the same resource IDs. The name update requires `apps:update`, which is included in the default login request.
 
 ### Remove managed resources
 
@@ -117,7 +218,7 @@ Omitted fields and resource sections preserve existing values. Removing a previo
 Planned revocations, cap removal, and redirect removal need an additional flag:
 
 ```sh
-./bin/zorveus apply --plan removal.plan.json --yes --allow-delete
+zorveus apply --plan removal.plan.json --yes --allow-delete
 ```
 
 Service keys and provider credentials belong to the organization. Removing their entries from a manifest leaves those shared resources intact.
@@ -127,7 +228,7 @@ Service keys and provider credentials belong to the organization. Removing their
 Keep the saved plan and the `.zorveus/` directory beside your manifest, then repeat the same apply command:
 
 ```sh
-./bin/zorveus apply --plan zorveus.plan.json --yes
+zorveus apply --plan zorveus.plan.json --yes
 ```
 
 The CLI uses its recorded progress to resume. If a resource ID is known but its generated secret was not saved, recovery can rotate the credential. If a creation or rotation outcome is unknown, apply stops to avoid repeating an uncertain operation. Inspect the resource and reported journal before continuing. An unfinished apply blocks a new plan for the same manifest.
@@ -135,10 +236,11 @@ The CLI uses its recorded progress to resume. If a resource ID is known but its 
 ## Import an existing app
 
 ```sh
-./bin/zorveus login --scope "apps:read app_connections:read routing_keys:read"
-./bin/zorveus import --app-id app_example --config imported.json
-./bin/zorveus status --config imported.json
+zorveus import --app-id app_example --config imported.json
+zorveus status --config imported.json
 ```
+
+Replace `app_example` with the app ID from your manifest or dashboard. Import requires `apps:read`, `app_connections:read`, and `routing_keys:read`; the default login request already includes them.
 
 Import writes the app's settings, active programmatic inference connections, and routing keys to a new manifest, preserving their IDs. It does not import secrets, customer connections, or shared organization credentials. The destination must not already exist.
 
@@ -147,10 +249,10 @@ Status reports changed fields, missing or revoked resources, and the latest appl
 ## Create a development copy
 
 ```sh
-./bin/zorveus clone --from zorveus.json --to zorveus.dev.json --name "Assistant development"
-./bin/zorveus validate --config zorveus.dev.json
-./bin/zorveus plan --config zorveus.dev.json --out development.plan.json
-./bin/zorveus apply --plan development.plan.json --yes
+zorveus clone --from zorveus.json --to zorveus.dev.json --name "Assistant development"
+zorveus validate --config zorveus.dev.json
+zorveus plan --config zorveus.dev.json --out development.plan.json
+zorveus apply --plan development.plan.json --yes
 ```
 
 Clone preserves configuration and aliases while removing app, inference-key, and routing-key IDs. Applying the copy creates separate resources. The source is unchanged, and the destination must be new.
@@ -177,7 +279,7 @@ Add a `providerCredentials` section to your app manifest:
 
 Set `OPENAI_API_KEY` in the environment of the shell running the CLI. The CLI does not automatically load `.env` files. Keep the actual key out of the manifest.
 
-Request `provider_credentials:read` and `provider_credentials:write` alongside the permissions for the app and keys you manage, then run plan and apply. The model must also be allowed by your app and inference key. With `auto_resolve`, eligible connections in the organization can use the credential according to its model policy.
+Provider management requires `provider_credentials:read` and `provider_credentials:write`, both included in the default login request. Run plan and apply after setting the environment variable. The model must also be allowed by your app and inference key. With `auto_resolve`, eligible connections in the organization can use the credential according to its model policy.
 
 Provider metadata updates preserve the stored secret. A changed secret input proposes rotation; an unchanged input and active version produce no rotation. Status can compare the remembered input when its environment variable is available. An unavailable variable is reported as `unverified`.
 
@@ -187,26 +289,26 @@ Use `providerConfig` for nonsecret provider settings. Azure requires `api_base` 
 
 Declare `serviceKeys` in a manifest to create or manage organization service keys. Each entry contains a name and machine scopes, or an existing ID to reuse. Newly generated secrets go to the OS credential store.
 
-Request `service_keys:read`, `service_keys:write`, and, for revocation, `service_keys:revoke`. Service-key management requires organization-wide consent.
+Service-key management uses `service_keys:read`, `service_keys:write`, and, for revocation, `service_keys:revoke`. These are included in the default login request. Service-key management requires organization-wide consent.
 
 ```sh
-./bin/zorveus service-keys list
-./bin/zorveus service-keys revoke --id service_example --yes
+zorveus service-keys list
+zorveus service-keys revoke --id service_example --yes
 ```
 
 Revocation affects the key across the organization. Service-key payload scopes describe what the generated key can do; they are separate from the permissions granted to your CLI login.
 
-## Local development
+## Use another environment
 
-With the management API on port 8000 and dashboard on port 3000:
+To connect to a local Zorveus server with its management API on port 8000 and dashboard on port 3000:
 
 ```sh
-./bin/zorveus login --local
-./bin/zorveus whoami
-./bin/zorveus apps list
+zorveus login --local
+zorveus whoami
+zorveus apps list
 ```
 
-`--local` selects `http://localhost:8000` and `http://localhost:3000`. Subsequent commands use the saved login's API origin. Add `--scope` to the local login command when you need write permissions.
+`--local` selects `http://localhost:8000` and `http://localhost:3000`. Subsequent commands use the saved login's API origin. Local login requests the same full set of CLI permissions by default. Use `--scope` to request fewer permissions.
 
 For other environments, use `--api-url` and `login --dashboard-url`. Custom HTTP origins must use loopback addresses and require `--allow-insecure-loopback`.
 
@@ -217,13 +319,13 @@ Load zsh completion in your current terminal:
 ```zsh
 autoload -Uz compinit
 compinit
-source <(./bin/zorveus completion zsh)
+source <(zorveus completion zsh)
 ```
 
-For future terminals, add the `source` line to `~/.zshrc` with the executable's absolute path. If your shell already runs `compinit`, keep its existing setup. Bash, fish, and PowerShell are also supported:
+For future terminals, add the `source` line to `~/.zshrc` after your shell's completion setup. If your shell already runs `compinit`, keep its existing setup. Bash, fish, and PowerShell are also supported:
 
 ```sh
-./bin/zorveus completion --help
+zorveus completion --help
 ```
 
 ## Scripts and JSON output
@@ -231,10 +333,12 @@ For future terminals, add the `source` line to `~/.zshrc` with the executable's 
 Use `--json` for structured results and `--non-interactive` to prevent interactive login:
 
 ```sh
-./bin/zorveus status --config zorveus.json --json --non-interactive
+zorveus status --config zorveus.json --json --non-interactive
 ```
 
 JSON results include `version`, `ok`, `command`, and either `result` or `error`. Diagnostics go to stderr. Status exits zero after a successful read even when configuration differs, so check `result.in_sync` in scripts.
+
+Normal terminal errors show a readable message. Use `--log-level debug` when you need additional command diagnostics on stderr; debug output also excludes credentials.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -261,19 +365,8 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `service-keys list`, `service-keys revoke` | Inspect and revoke organization service keys |
 | `completion` | Generate shell completion scripts |
 
-Run `./bin/zorveus <command> --help` for flags. See the [manifest reference](docs/manifest-v1.md) and [JSON Schema](internal/manifest/schema/v1.json) for configuration details.
+Run `zorveus <command> --help` for flags. See the [manifest reference](docs/manifest-v1.md) and [JSON Schema](internal/manifest/schema/v1.json) for configuration details.
 
-## Contribute
+## Development
 
-Run tests and static checks:
-
-```sh
-go test -race ./...
-go vet ./...
-```
-
-Build executables for macOS, Linux, and Windows on amd64 and arm64:
-
-```sh
-sh scripts/check-release-builds.sh
-```
+See [Building Zorveus](BUILDING.md) for source builds, local development, tests, and platform binaries.

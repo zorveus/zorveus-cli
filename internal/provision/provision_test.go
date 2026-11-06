@@ -506,8 +506,18 @@ func TestLostCreationResponseNeverRepeatsCreate(t *testing.T) {
 	if len(backend.writes) != 1 {
 		t.Fatal("unknown creation repeated")
 	}
-	if _, err := service.Plan(context.Background(), "", config, path+".new"); err == nil || problem.Safe(err).Code != "apply_pending" {
-		t.Fatalf("new plan bypassed pending creation: %v", err)
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, output := range []string{path + ".new", path} {
+		if _, err := service.Plan(context.Background(), "", config, output); err == nil || problem.Safe(err).Code != "apply_pending" {
+			t.Fatalf("replanning bypassed pending creation: %v", err)
+		}
+	}
+	current, err := os.ReadFile(path)
+	if err != nil || string(current) != string(original) {
+		t.Fatal("replanning replaced the plan needed to resume an unfinished apply")
 	}
 }
 

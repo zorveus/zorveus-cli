@@ -27,8 +27,9 @@ func run() int {
 		Now:   time.Now,
 	}
 	return cli.Execute(ctx, os.Args[1:], os.Stdout, os.Stderr, cli.Dependencies{
-		Auth:            service,
-		InputIsTerminal: term.IsTerminal(int(os.Stdin.Fd())),
-		OpenBrowser:     cli.OpenBrowser,
+		Auth:             service,
+		InputIsTerminal:  term.IsTerminal(int(os.Stdin.Fd())),
+		OutputIsTerminal: term.IsTerminal(int(os.Stdout.Fd())),
+		OpenBrowser:      cli.OpenBrowser,
 	})
 }

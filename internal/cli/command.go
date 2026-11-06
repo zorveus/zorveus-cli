@@ -20,11 +20,19 @@ import (
 )
 
 type Dependencies struct {
-	Auth            *auth.Service
-	Secrets         provision.SecretStore
-	InputIsTerminal bool
-	OpenBrowser     func(context.Context, string) error
+	Auth             *auth.Service
+	Secrets          provision.SecretStore
+	InputIsTerminal  bool
+	OutputIsTerminal bool
+	OpenBrowser      func(context.Context, string) error
 }
+
+const defaultLoginScopes = "apps:read apps:create apps:update apps:delete apps:rotate_secret " +
+	"app_connections:read app_connections:write app_connections:revoke " +
+	"routing_keys:read routing_keys:write " +
+	"caps:read caps:app_write caps:org_write " +
+	"service_keys:read service_keys:write service_keys:revoke " +
+	"provider_credentials:read provider_credentials:write"
 
 type flags struct {
 	jsonOutput         bool
@@ -33,6 +41,7 @@ type flags struct {
 	allowInsecureLocal bool
 	apiOrigin          string
 	logLevel           string
+	noColor            bool
 }
 
 type resultEnvelope struct {
@@ -82,6 +91,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 		return problem.New("invalid_arguments", "Invalid flags. Run zorveus --help for usage.", 2)
 	})
 	root.PersistentFlags().BoolVar(&settings.jsonOutput, "json", false, "Write one versioned JSON result")
+	root.PersistentFlags().BoolVar(&settings.noColor, "no-color", false, "Disable terminal colors")
 	root.PersistentFlags().BoolVar(&settings.nonInteractive, "non-interactive", false, "Never open a browser or wait for input")
 	root.PersistentFlags().BoolVar(&settings.localMode, "local", false, "Use the local API on port 8000 and dashboard on port 3000")
 	root.PersistentFlags().BoolVar(&settings.allowInsecureLocal, "allow-insecure-loopback", false, "Allow HTTP origins on localhost or loopback IPs for local development")
@@ -115,7 +125,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	if command != nil {
 		commandName = command.CommandPath()
 	}
-	logger.Error("command failed", "command", commandName, "code", failure.Code)
+	logger.Debug("command failed", "command", commandName, "code", failure.Code)
 	if settings.jsonOutput {
 		_ = json.NewEncoder(stdout).Encode(resultEnvelope{Version: 1, OK: false, Command: commandName, Error: failure})
 	} else {
@@ -191,7 +201,7 @@ func loginCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 			return outputError(err)
 		},
 	}
-	command.Flags().StringVar(&scope, "scope", "apps:read", "Space-separated management scopes")
+	command.Flags().StringVar(&scope, "scope", defaultLoginScopes, "Space-separated management scopes; defaults to all CLI permissions")
 	command.Flags().StringVar(&dashboardOrigin, "dashboard-url", "", "Override the dashboard origin; defaults to https://app.zorveus.com")
 	command.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "Maximum time to complete login")
 	command.Flags().BoolVar(&manualBrowser, "no-browser", false, "Print the authorization URL so you can open it in your chosen browser")

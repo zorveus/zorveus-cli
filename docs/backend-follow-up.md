@@ -1,6 +1,8 @@
 # CLI manifest backend contract
 
-The CLI is wired to the backend follow-up supplied on 6 November 2026. Service-key management, provider metadata updates, and offset pagination are implemented and covered by fake-API tests. Live CLI/backend verification remains deferred at the user's request.
+The CLI is wired to the backend follow-up supplied on 6 November 2026. Service-key management, provider metadata updates, and offset pagination are implemented and covered by fake-API tests.
+
+Local backend verification passed for provisioning, updates, import, clone, status, and recovery. OpenAI BYOK verification also passed for credential creation, metadata updates, stored-secret rotation, recovery after an interrupted local save, and inference before and after rotation. Verification resources and temporary logins were cleaned up. Other providers and production deployments have not been verified live.
 
 No backend source, migration, seed, or client policy was changed by the CLI work.
 

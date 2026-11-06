@@ -80,6 +80,26 @@ type Step struct {
 	VersionID   string   `json:"expected_secret_version,omitempty"`
 }
 
+// FieldChanges uses the same comparisons as planning, including exact decimal values.
+func (step Step) FieldChanges() []FieldChange {
+	names := map[string]bool{}
+	for name := range step.Before {
+		names[name] = true
+	}
+	for name := range step.After {
+		names[name] = true
+	}
+	changes := []FieldChange{}
+	for name := range names {
+		if sameFields(step.Before.pick(name), step.After.pick(name)) {
+			continue
+		}
+		changes = append(changes, FieldChange{Field: name, Actual: step.Before[name], Desired: step.After[name]})
+	}
+	slices.SortFunc(changes, func(left, right FieldChange) int { return strings.Compare(left.Field, right.Field) })
+	return changes
+}
+
 type Target struct {
 	Origin string `json:"api_origin"`
 	Org    string `json:"organization"`

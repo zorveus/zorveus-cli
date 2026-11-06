@@ -91,7 +91,7 @@ func loadJSON(path string, value any) (bool, []byte, error) {
 func writeNew(path string, data []byte) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return problem.New("destination_exists", "Could not create the plan file. Choose a new --out path in an existing directory.", 1)
+		return problem.New("destination_exists", "Could not create a new file. Choose an unused destination in an existing directory.", 1)
 	}
 	_, err = file.Write(data)
 	if err == nil {

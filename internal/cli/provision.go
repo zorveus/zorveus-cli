@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/zorveus/zorveus-cli/internal/provision"
@@ -24,19 +24,13 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 			if settings.jsonOutput {
 				return writeJSON(stdout, command.CommandPath(), result)
 			}
-			for _, change := range result.Changes {
-				before, _ := json.Marshal(change.Before)
-				after, _ := json.Marshal(change.After)
-				if _, err := fmt.Fprintf(stdout, "%s %s\n  before: %s\n  after:  %s\n", terminalText(change.Kind), terminalText(change.Ref), before, after); err != nil {
-					return outputError(err)
-				}
-			}
-			_, err = fmt.Fprintf(stdout, "%d proposed changes. Saved plan to %s\n", result.Operations, terminalText(result.Plan))
+			color := dependencies.OutputIsTerminal && !settings.noColor && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+			_, err = io.WriteString(stdout, formatPlan(result, color))
 			return outputError(err)
 		},
 	}
 	command.Flags().StringVar(&config, "config", "zorveus.json", "Manifest to compare")
-	command.Flags().StringVar(&output, "out", "zorveus.plan.json", "New file for the saved plan")
+	command.Flags().StringVar(&output, "out", "zorveus.plan.json", "Saved plan path; replaces an existing plan for this manifest")
 	_ = command.MarkFlagFilename("config", "json")
 	_ = command.MarkFlagFilename("out", "json")
 	return command

@@ -144,9 +144,39 @@ func TestErrorsHaveStableExitCodesAndOneJSONResult(t *testing.T) {
 		if result.OK || result.Error == nil || result.Error.Code != test.errorCode {
 			t.Fatalf("unexpected error result: %s", stdout.String())
 		}
+		if stderr.Len() != 0 {
+			t.Fatalf("default JSON errors should not repeat diagnostics on stderr: %s", stderr.String())
+		}
 		if strings.Contains(stdout.String()+stderr.String(), "private-") {
 			t.Fatal("an error exposed raw input or a credential-store error")
 		}
+	}
+}
+
+func TestHumanErrorShowsOnlyTheReadableMessage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), []string{"whoami"}, &stdout, &stderr, testDependencies(&testStore{}))
+	if code != 3 || stdout.Len() != 0 {
+		t.Fatalf("unexpected missing-login result: exit %d, stdout %s", code, stdout.String())
+	}
+	if stderr.String() != "No login is saved. Run zorveus login.\n" {
+		t.Fatalf("unexpected terminal error: %s", stderr.String())
+	}
+}
+
+func TestDebugDiagnosticsAreOptionalAndExcludeRawErrors(t *testing.T) {
+	store := &testStore{err: errors.New("private-credential-store-details")}
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), []string{"whoami", "--json", "--log-level", "debug"}, &stdout, &stderr, testDependencies(store))
+	var result resultEnvelope
+	if code != 1 || json.Unmarshal(stdout.Bytes(), &result) != nil || result.Error == nil || result.Error.Code != "operation_failed" {
+		t.Fatalf("debug mode changed the JSON error: exit %d, stdout %s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "command failed") || !strings.Contains(stderr.String(), "code=operation_failed") {
+		t.Fatal("debug mode did not include safe failure context")
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "private-") {
+		t.Fatal("debug mode exposed credential-store details")
 	}
 }
 
@@ -163,17 +193,25 @@ func (handler requestHandler) RoundTrip(request *http.Request) (*http.Response, 
 }
 
 func TestLoginUsesEnvironmentDefaultsAndExplicitOverrides(t *testing.T) {
+	allScopes := "apps:read apps:create apps:update apps:delete apps:rotate_secret " +
+		"app_connections:read app_connections:write app_connections:revoke " +
+		"routing_keys:read routing_keys:write caps:read caps:app_write caps:org_write " +
+		"service_keys:read service_keys:write service_keys:revoke " +
+		"provider_credentials:read provider_credentials:write"
 	cases := []struct {
 		name      string
 		arguments []string
 		api       string
 		dashboard string
+		scope     string
 	}{
-		{"production", nil, "https://api.zorveus.com", "https://app.zorveus.com"},
-		{"local", []string{"--local"}, "http://localhost:8000", "http://localhost:3000"},
-		{"root dashboard", []string{"--dashboard-url", "https://zorveus.com"}, "https://api.zorveus.com", "https://zorveus.com"},
-		{"custom deployment", []string{"--api-url", "https://api.example.test", "--dashboard-url", "https://dashboard.example.test"}, "https://api.example.test", "https://dashboard.example.test"},
-		{"custom local ports", []string{"--local", "--api-url", "http://127.0.0.1:8010", "--dashboard-url", "http://127.0.0.1:3010"}, "http://127.0.0.1:8010", "http://127.0.0.1:3010"},
+		{"production", nil, "https://api.zorveus.com", "https://app.zorveus.com", allScopes},
+		{"local", []string{"--local"}, "http://localhost:8000", "http://localhost:3000", allScopes},
+		{"root dashboard", []string{"--dashboard-url", "https://zorveus.com"}, "https://api.zorveus.com", "https://zorveus.com", allScopes},
+		{"custom deployment", []string{"--api-url", "https://api.example.test", "--dashboard-url", "https://dashboard.example.test"}, "https://api.example.test", "https://dashboard.example.test", allScopes},
+		{"custom local ports", []string{"--local", "--api-url", "http://127.0.0.1:8010", "--dashboard-url", "http://127.0.0.1:3010"}, "http://127.0.0.1:8010", "http://127.0.0.1:3010", allScopes},
+		{"limited permissions", []string{"--scope", "apps:read"}, "https://api.zorveus.com", "https://app.zorveus.com", "apps:read"},
+		{"limited local permissions", []string{"--local", "--scope", " apps:read   apps:update "}, "http://localhost:8000", "http://localhost:3000", "apps:read apps:update"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -198,6 +236,9 @@ func TestLoginUsesEnvironmentDefaultsAndExplicitOverrides(t *testing.T) {
 				if authorization.Scheme+"://"+authorization.Host != test.dashboard {
 					t.Error("authorization used the wrong dashboard origin")
 				}
+				if authorization.Query().Get("scope") != test.scope {
+					t.Errorf("requested scopes = %q, expected %q", authorization.Query().Get("scope"), test.scope)
+				}
 				callback, err := url.Parse(authorization.Query().Get("redirect_uri"))
 				if err != nil {
 					return err
@@ -218,6 +259,9 @@ func TestLoginUsesEnvironmentDefaultsAndExplicitOverrides(t *testing.T) {
 			code := Execute(context.Background(), arguments, &stdout, &stderr, dependencies)
 			if code != 0 || !store.present || store.login.APIOrigin != test.api {
 				t.Fatalf("login did not save the selected API origin: exit %d, diagnostics %s", code, stderr.String())
+			}
+			if store.login.Scope != "apps:read" {
+				t.Fatal("saved login must use the issued scopes, not the requested scopes")
 			}
 		})
 	}

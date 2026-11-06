@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
@@ -28,7 +29,7 @@ func (service *Service) Plan(ctx context.Context, origin, config, output string)
 	if err != nil {
 		return PlanResult{}, err
 	}
-	if err := writeNew(output, encoded(plan)); err != nil {
+	if err := savePlan(output, plan); err != nil {
 		return PlanResult{}, err
 	}
 	changes := []Step{}
@@ -38,6 +39,31 @@ func (service *Service) Plan(ctx context.Context, origin, config, output string)
 		}
 	}
 	return PlanResult{Plan: output, Operations: len(changes), Changes: changes, RequiredScopes: plan.Scopes}, nil
+}
+
+func savePlan(path string, plan Plan) error {
+	output, err := filepath.Abs(path)
+	if err != nil {
+		return storageError()
+	}
+	if output == plan.Config || strings.HasPrefix(output, directory(plan.Config)+string(filepath.Separator)) {
+		return problem.New("invalid_plan_output", "Save the plan separately from the manifest and its .zorveus state directory.", 2)
+	}
+	var previous Plan
+	exists, _, err := loadJSON(output, &previous)
+	if err != nil {
+		return err
+	}
+	if exists {
+		if previous.Version != 1 || !operationID.MatchString(previous.ID) || !filepath.IsAbs(previous.Config) {
+			return problem.New("invalid_plan_output", "The output file is not a saved Zorveus plan. Choose another --out path.", 2)
+		}
+		if previous.Config != plan.Config {
+			return problem.New("invalid_plan_output", "The output plan belongs to a different manifest. Use a separate --out filename.", 2)
+		}
+	}
+	// Write only after planning succeeds, keeping the previous file until replacement.
+	return replaceFile(output, encoded(plan))
 }
 
 func (service *Service) build(ctx context.Context, origin, config string) (Plan, error) {
