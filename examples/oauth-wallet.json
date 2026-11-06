@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "app": {
+    "name": "Connected assistant",
+    "allowedModels": ["*"],
+    "allowedScopes": ["inference:write", "models:*"],
+    "oauth": {
+      "clientType": "public",
+      "redirectUris": ["https://example.com/oauth/callback"]
+    },
+    "consent": {
+      "defaultCap": {
+        "amount": "10",
+        "currency": "USD",
+        "period": "monthly"
+      },
+      "minimumCapAmount": "1",
+      "maximumCapAmount": "50",
+      "allowUnlimitedCap": false
+    }
+  }
+}

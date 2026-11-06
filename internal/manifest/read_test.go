@@ -13,13 +13,18 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
-func TestAcceptedFixturesAndProposalExamples(t *testing.T) {
+func TestAcceptedFixturesAndDocumentedExamples(t *testing.T) {
 	paths, err := filepath.Glob("testdata/valid/*.json")
 	if err != nil || len(paths) == 0 {
 		t.Fatal("accepted fixtures are missing")
 	}
+	examplePaths, err := filepath.Glob("../../examples/*.json")
+	if err != nil || len(examplePaths) == 0 {
+		t.Fatal("example manifests are missing")
+	}
+	paths = append(paths, examplePaths...)
 	for _, path := range paths {
-		t.Run(filepath.Base(path), func(t *testing.T) {
+		t.Run(path, func(t *testing.T) {
 			if _, err := Load(path); err != nil {
 				t.Fatal(err)
 			}

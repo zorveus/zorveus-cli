@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "app": {
+    "name": "OpenAI document processor",
+    "allowedModels": ["openai/gpt-4o-mini"]
+  },
+  "keys": [
+    {
+      "name": "Processing backend",
+      "routingAlias": "processor",
+      "creditMode": "enforce_if_present",
+      "overrunPolicy": "limit_output",
+      "cap": {
+        "amount": "50",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  ],
+  "providerCredentials": [
+    {
+      "name": "OpenAI primary",
+      "provider": "openai",
+      "secretFromEnv": "OPENAI_API_KEY",
+      "routingMode": "auto_resolve",
+      "defaultModelPolicy": ["openai/gpt-4o-mini"]
+    }
+  ]
+}

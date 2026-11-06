@@ -110,6 +110,8 @@ zorveus logout
 
 ## Configure an app
 
+For a complete starting configuration, choose one of the [example manifests](examples/README.md): a minimal app, an internal tool, subscription tiers, business credits, OAuth consent, OpenAI BYOK, or a service-key backend.
+
 Create a starter manifest:
 
 ```sh
