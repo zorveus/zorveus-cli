@@ -9,11 +9,10 @@
     "creditUnitsPerUsd": "1000",
     "productUserChargeMultiplier": "2"
   },
-  "keys": [
-    {
+  "keys": {
+    "starter": {
       "id": "key_starter",
       "name": "Starter plan",
-      "routingAlias": "starter",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -22,10 +21,9 @@
         "period": "monthly"
       }
     },
-    {
+    "business": {
       "id": "key_business",
       "name": "Business plan",
-      "routingAlias": "business",
       "creditMode": "enforce",
       "overrunPolicy": "carry_overrun_forward",
       "productUserChargeMultiplier": "1.5",
@@ -35,9 +33,9 @@
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "public": {
       "id": "key_primary_router",
       "name": "Primary backend",
       "members": [
@@ -46,7 +44,7 @@
       ],
       "defaultSelector": null
     },
-    {
+    "public_2": {
       "id": "key_business_router",
       "name": "Business integration",
       "members": [
@@ -54,9 +52,9 @@
       ],
       "defaultSelector": "business"
     }
-  ],
-  "serviceKeys": [
-    {
+  },
+  "serviceKeys": {
+    "backend": {
       "id": "service_key_billing",
       "name": "Billing backend",
       "scopes": [
@@ -64,5 +62,5 @@
         "product_users:write"
       ]
     }
-  ]
+  }
 }

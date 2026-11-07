@@ -129,30 +129,33 @@ Edit the manifest to describe the resources you need. This example creates an ap
   "version": 1,
   "app": {
     "name": "Assistant",
-    "allowedModels": ["*"]
+    "allowedModels": [
+      "*"
+    ]
   },
-  "keys": [
-    {
+  "keys": {
+    "backend": {
       "name": "Backend",
-      "routingAlias": "backend",
       "cap": {
         "amount": "100",
         "currency": "USD",
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "primary": {
       "name": "Assistant router",
-      "members": ["backend"],
+      "members": [
+        "backend"
+      ],
       "defaultSelector": "backend"
     }
-  ]
+  }
 }
 ```
 
-`routingAlias` connects manifest entries. A routing key's members refer to these aliases. Each inference key also works directly, without a router. Write monetary amounts as strings to preserve decimal precision.
+Resource object keys connect manifest entries. A routing key's members refer to the names in `keys`, such as `backend`. Each inference key also works directly, without a router. Write monetary amounts as strings to preserve decimal precision.
 
 Validate the file:
 
@@ -160,14 +163,14 @@ Validate the file:
 zorveus validate
 ```
 
-`init`, `validate`, and `clone` work offline without login. Validation checks the file's structure and references; planning checks remote resources and access.
+`init`, `validate`, `clone`, and `promote` work offline without login. Validation checks the file's structure and references; planning checks remote resources and access.
 
 See the [manifest reference](docs/manifest-v1.md) for OAuth settings, consent defaults, pricing defaults, key policies, and the full update rules.
 
 ## Review and apply changes
 
 ```sh
-zorveus plan --config zorveus.json --out zorveus.plan.json
+zorveus plan --config zorveus.json
 ```
 
 Plan shows resource blocks with `+` for additions, `~` for updates, and `-` for removals or revocations. Updates show changed fields as `old -> new` and hide unchanged fields. The summary counts planned additions, updates, and removals. Plan saves these changes without changing remote resources.
@@ -185,7 +188,7 @@ Apply creates or updates the resources and writes their IDs back into your manif
 
 The CLI saves newly generated secrets in your OS credential store and reports their account names. Secrets do not appear in the manifest, saved plans, or command output. On macOS, use Keychain Access to find entries under `com.zorveus.cli.resources` with the reported account name.
 
-If you edit the manifest or a planned remote value changes, run `zorveus plan` again before applying. A successful plan replaces the existing plan for that manifest at the same output path. If planning fails, the previous file is preserved. Use separate `--out` filenames for different manifests.
+If you edit the manifest or a planned remote value changes, run `zorveus plan` again before applying. A successful plan replaces the existing plan for that manifest at the same output path. If planning fails, the previous file is preserved. The default plan filename follows the manifest: `zorveus.dev.json` produces `zorveus.dev.plan.json` in the same directory. With `--from`, the filename follows the target `--config` file. Use `--out` to choose another path.
 
 ### Check the result and make an update
 
@@ -216,7 +219,7 @@ Expect `in_sync: true` again and the same resource IDs. The name update requires
 
 ### Remove managed resources
 
-Omitted fields and resource sections preserve existing values. Removing a previously managed key or router from an explicit array proposes its revocation. An empty array removes all resources recorded for that section of the manifest. Unrelated resources are left alone.
+Omitted fields and resource sections preserve existing values. Removing a previously managed key or router from an explicit resource object proposes its revocation. An empty object removes all resources recorded for that section of the manifest. Unrelated resources are left alone.
 
 Planned revocations, cap removal, and redirect removal need an additional flag:
 
@@ -254,13 +257,31 @@ Status reports changed fields, missing or revoked resources, and the latest appl
 ```sh
 zorveus clone --from zorveus.json --to zorveus.dev.json --name "Assistant development"
 zorveus validate --config zorveus.dev.json
-zorveus plan --config zorveus.dev.json --out development.plan.json
-zorveus apply --plan development.plan.json --yes
+zorveus plan --config zorveus.dev.json
+zorveus apply --plan zorveus.dev.plan.json --yes
 ```
 
 Clone preserves configuration and aliases while removing app, inference-key, and routing-key IDs. Applying the copy creates separate resources. The source is unchanged, and the destination must be new.
 
 Clone rejects manifests containing service keys or provider credentials because those resources are shared across the organization. Prepare a manifest without those sections before cloning.
+
+## Plan changes from development to production
+
+Keep separate dev and prod manifests. Both use the same resource object names, and each keeps its own backend IDs. To bring development settings into an existing production app:
+
+```sh
+zorveus login
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+zorveus apply --plan zorveus.prod.plan.json --yes
+```
+
+Choose the production organization during login. The source supplies the configuration; matching entries retain their production IDs. For example, `keys.backend` matches `keys.backend`, regardless of display names or JSON property order. New entries receive production IDs during apply.
+
+Plan leaves both files unchanged. Apply writes the resolved settings and IDs into the production manifest. The source file stays unchanged. Editing either file after planning requires a fresh plan before starting apply.
+
+Supplied names, callbacks, caps, model lists, and credential settings come from the source. Omitted optional fields preserve target values, except key model inheritance. An omitted resource section preserves that section. An explicit object supplies its desired entries, so removing a managed inference key or router can propose revocation. Review those changes and pass `--allow-delete` during apply when appropriate.
+
+See the [cross-app planning guide](docs/promotion.md) for complete before-and-after JSON. Use `promote --from dev.json --to prod.json` only when you want to update the target JSON locally before planning.
 
 ## Bring your own provider key
 
@@ -268,15 +289,17 @@ Add a `providerCredentials` section to your app manifest:
 
 ```json
 {
-  "providerCredentials": [
-    {
+  "providerCredentials": {
+    "openai": {
       "name": "OpenAI primary",
       "provider": "openai",
       "secretFromEnv": "OPENAI_API_KEY",
       "routingMode": "auto_resolve",
-      "defaultModelPolicy": ["openai/gpt-4o-mini"]
+      "defaultModelPolicy": [
+        "openai/gpt-4o-mini"
+      ]
     }
-  ]
+  }
 }
 ```
 
@@ -364,6 +387,7 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `plan`, `apply` | Review and apply configuration changes |
 | `import` | Adopt an existing app into a manifest |
 | `clone` | Prepare a separate app configuration |
+| `promote` | Update a target JSON locally with source settings and target IDs |
 | `status` | Compare the manifest with remote resources |
 | `service-keys list`, `service-keys revoke` | Inspect and revoke organization service keys |
 | `completion` | Generate shell completion scripts |

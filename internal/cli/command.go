@@ -104,6 +104,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.AddCommand(initCommand(settings, stdout))
 	root.AddCommand(validateCommand(settings, stdout, stderr))
 	root.AddCommand(cloneCommand(settings, stdout))
+	root.AddCommand(promoteCommand(settings, stdout))
 	root.AddCommand(planCommand(settings, dependencies, stdout))
 	root.AddCommand(applyCommand(settings, dependencies, stdout))
 	root.AddCommand(importCommand(settings, dependencies, stdout))

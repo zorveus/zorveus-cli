@@ -283,6 +283,9 @@ func TestCompletionSuggestsCommandsAndFlagsWithoutAuthentication(t *testing.T) {
 		{[]string{"__complete", "lo"}, []string{"login", "logout"}},
 		{[]string{"__complete", "apps", "l"}, []string{"list"}},
 		{[]string{"__complete", "login", "--loc"}, []string{"--local"}},
+		{[]string{"__complete", "pro"}, []string{"promote"}},
+		{[]string{"__complete", "promote", "--fr"}, []string{"--from"}},
+		{[]string{"__complete", "plan", "--fr"}, []string{"--from"}},
 	}
 	for _, test := range cases {
 		var stdout, stderr bytes.Buffer

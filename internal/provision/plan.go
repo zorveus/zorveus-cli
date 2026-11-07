@@ -6,13 +6,17 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/zorveus/zorveus-cli/internal/manifest"
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
 func (service *Service) Plan(ctx context.Context, origin, config, output string) (PlanResult, error) {
+	return service.PlanFrom(ctx, origin, config, output, "")
+}
+
+func (service *Service) PlanFrom(ctx context.Context, origin, config, output, source string) (PlanResult, error) {
 	config, err := filepath.Abs(config)
 	if err != nil {
 		return PlanResult{}, storageError()
@@ -25,7 +29,7 @@ func (service *Service) Plan(ctx context.Context, origin, config, output string)
 	if err := requireFinishedApply(config); err != nil {
 		return PlanResult{}, err
 	}
-	plan, err := service.build(ctx, origin, config)
+	plan, err := service.buildFrom(ctx, origin, config, source)
 	if err != nil {
 		return PlanResult{}, err
 	}
@@ -67,9 +71,43 @@ func savePlan(path string, plan Plan) error {
 }
 
 func (service *Service) build(ctx context.Context, origin, config string) (Plan, error) {
+	return service.buildFrom(ctx, origin, config, "")
+}
+
+func (service *Service) buildFrom(ctx context.Context, origin, config, source string) (Plan, error) {
 	desired, original, canonical, err := loadManifest(config)
 	if err != nil {
 		return Plan{}, err
+	}
+	var sourceDigest string
+	if source != "" {
+		source, err = filepath.Abs(source)
+		if err != nil {
+			return Plan{}, storageError()
+		}
+		if source == config {
+			return Plan{}, problem.New("promotion_same_file", "Use different source and target manifests with --from and --config.", 2)
+		}
+		_, sourceBytes, _, err := loadManifest(source)
+		if err != nil {
+			return Plan{}, err
+		}
+		sourceDocument, err := manifest.Parse(sourceBytes)
+		if err != nil {
+			return Plan{}, err
+		}
+		targetDocument, err := manifest.Parse(canonical)
+		if err != nil {
+			return Plan{}, err
+		}
+		canonical, err = manifest.Promote(sourceDocument, targetDocument)
+		if err != nil {
+			return Plan{}, err
+		}
+		if err := json.Unmarshal(canonical, &desired); err != nil {
+			return Plan{}, err
+		}
+		sourceDigest = digest(sourceBytes)
 	}
 	remote := &gateway{ctx: ctx, service: service, target: Target{Origin: origin}}
 	if err := remote.identify(); err != nil {
@@ -80,6 +118,7 @@ func (service *Service) build(ctx context.Context, origin, config string) (Plan,
 		return Plan{}, err
 	}
 	plan := Plan{Version: 1, ID: newID(), Target: remote.target, Config: config, ConfigDigest: digest(original), StateDigest: digest(stateBytes), Manifest: canonical, Steps: []Step{}, Bindings: map[string]string{}}
+	plan.Source, plan.SourceDigest = source, sourceDigest
 	models, err := plan.planApp(remote, desired.App)
 	if err != nil {
 		return Plan{}, err
@@ -93,12 +132,12 @@ func (service *Service) build(ctx context.Context, origin, config string) (Plan,
 		}
 	}
 	for index, key := range desired.Keys {
-		if err := plan.planKey(remote, index, key, models); err != nil {
+		if err := plan.planKey(remote, desired.resourcePointer("keys", index), key, models); err != nil {
 			return Plan{}, err
 		}
 	}
 	for index, router := range desired.Routers {
-		if err := plan.planRouter(remote, index, router); err != nil {
+		if err := plan.planRouter(remote, desired.resourceRef("routingKeys", index), desired.resourcePointer("routingKeys", index), router); err != nil {
 			return Plan{}, err
 		}
 	}
@@ -157,7 +196,7 @@ func (plan *Plan) planApp(remote *gateway, app Fields) ([]string, error) {
 	return models, nil
 }
 
-func (plan *Plan) planKey(remote *gateway, index int, key Fields, models []string) error {
+func (plan *Plan) planKey(remote *gateway, pointer string, key Fields, models []string) error {
 	ref := "key:" + key.text("routingAlias")
 	id := key.text("id")
 	plan.Bindings[ref] = id
@@ -165,7 +204,7 @@ func (plan *Plan) planKey(remote *gateway, index int, key Fields, models []strin
 	if keyModels == nil {
 		keyModels = models
 	}
-	if err := requireModels(keyModels, models, "/keys/"+strconv.Itoa(index)+"/allowedModels"); err != nil {
+	if err := requireModels(keyModels, models, pointer+"/allowedModels"); err != nil {
 		return err
 	}
 	policy := fields(map[string]any{"allowed_models": keyModels})
@@ -213,8 +252,7 @@ func (plan *Plan) planKey(remote *gateway, index int, key Fields, models []strin
 	return nil
 }
 
-func (plan *Plan) planRouter(remote *gateway, index int, router Fields) error {
-	ref := "router:" + strconv.Itoa(index)
+func (plan *Plan) planRouter(remote *gateway, ref, pointer string, router Fields) error {
 	id := router.text("id")
 	plan.Bindings[ref] = id
 	var before Fields
@@ -244,7 +282,7 @@ func (plan *Plan) planRouter(remote *gateway, index int, router Fields) error {
 		for _, alias := range router.strings("members") {
 			memberRef := "key:" + alias
 			if _, ok := plan.Bindings[memberRef]; !ok {
-				return manifestError("unknown_member", "Declare this key or restore its CLI alias mapping before planning.", "/routingKeys/"+strconv.Itoa(index)+"/members")
+				return manifestError("unknown_member", "Declare this key or restore its CLI alias mapping before planning.", pointer+"/members")
 			}
 			step.Members = append(step.Members, Member{Ref: memberRef, Alias: alias})
 		}
@@ -263,7 +301,7 @@ func (plan *Plan) planRouter(remote *gateway, index int, router Fields) error {
 		after["default_selector_alias"] = before["default_selector_alias"]
 	}
 	if alias := after.text("default_selector_alias"); alias != "" && !slices.ContainsFunc(step.Members, func(m Member) bool { return m.Alias == alias }) {
-		return manifestError("invalid_default_selector", "The default selector must identify a desired routing member.", "/routingKeys/"+strconv.Itoa(index)+"/defaultSelector")
+		return manifestError("invalid_default_selector", "The default selector must identify a desired routing member.", pointer+"/defaultSelector")
 	}
 	after.set("members", plannedMembers(step.Members, plan.Bindings))
 	step.After = after

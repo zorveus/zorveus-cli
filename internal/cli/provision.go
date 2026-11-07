@@ -4,20 +4,25 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/zorveus/zorveus-cli/internal/provision"
 )
 
 func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *cobra.Command {
-	var config, output string
+	var config, output, source string
 	command := &cobra.Command{
 		Use:   "plan",
 		Short: "Read remote resources and save proposed manifest changes",
 		Args:  noArguments,
 		RunE: func(command *cobra.Command, arguments []string) error {
+			if !command.Flags().Changed("out") {
+				output = strings.TrimSuffix(config, filepath.Ext(config)) + ".plan.json"
+			}
 			service := provision.Service{Auth: dependencies.Auth, Secrets: dependencies.Secrets}
-			result, err := service.Plan(command.Context(), settings.apiOrigin, config, output)
+			result, err := service.PlanFrom(command.Context(), settings.apiOrigin, config, output, source)
 			if err != nil {
 				return err
 			}
@@ -30,8 +35,10 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 		},
 	}
 	command.Flags().StringVar(&config, "config", "zorveus.json", "Manifest to compare")
-	command.Flags().StringVar(&output, "out", "zorveus.plan.json", "Saved plan path; replaces an existing plan for this manifest")
+	command.Flags().StringVar(&source, "from", "", "Use settings from this manifest while retaining the target manifest's IDs")
+	command.Flags().StringVar(&output, "out", "", "Saved plan path; defaults to <manifest-name>.plan.json beside the manifest")
 	_ = command.MarkFlagFilename("config", "json")
+	_ = command.MarkFlagFilename("from", "json")
 	_ = command.MarkFlagFilename("out", "json")
 	return command
 }

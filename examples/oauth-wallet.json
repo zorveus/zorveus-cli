@@ -2,11 +2,18 @@
   "version": 1,
   "app": {
     "name": "Connected assistant",
-    "allowedModels": ["*"],
-    "allowedScopes": ["inference:write", "models:*"],
+    "allowedModels": [
+      "*"
+    ],
+    "allowedScopes": [
+      "inference:write",
+      "models:*"
+    ],
     "oauth": {
       "clientType": "public",
-      "redirectUris": ["https://example.com/oauth/callback"]
+      "redirectUris": [
+        "https://example.com/oauth/callback"
+      ]
     },
     "consent": {
       "defaultCap": {

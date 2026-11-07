@@ -22,7 +22,38 @@ import (
 
 const fullScope = "apps:read apps:create apps:update apps:rotate_secret app_connections:read app_connections:write app_connections:revoke routing_keys:read routing_keys:write caps:app_write caps:org_write service_keys:read service_keys:write service_keys:revoke provider_credentials:read provider_credentials:write"
 
-const newManifest = `{"version":1,"app":{"name":"Demo","allowedModels":["*"]},"keys":[{"name":"Primary","routingAlias":"primary","cap":{"amount":"100.000000000001","currency":"USD","period":"monthly"}},{"name":"Backup","routingAlias":"backup"}],"routingKeys":[{"name":"Router","members":["primary","backup"],"defaultSelector":"primary"}]}`
+const newManifest = `{
+  "app": {
+    "name": "Demo",
+    "allowedModels": [
+      "*"
+    ]
+  },
+  "keys": {
+    "primary": {
+      "cap": {
+        "amount": "100.000000000001",
+        "currency": "USD",
+        "period": "monthly"
+      },
+      "name": "Primary"
+    },
+    "secondary": {
+      "name": "Backup"
+    }
+  },
+  "routingKeys": {
+    "public": {
+      "defaultSelector": "primary",
+      "members": [
+        "primary",
+        "secondary"
+      ],
+      "name": "Router"
+    }
+  },
+  "version": 1
+}`
 
 type loginStore struct{ login auth.Login }
 
@@ -602,9 +633,9 @@ func TestUpdatesKeepResourceIDsAndDoNotRotateCredentials(t *testing.T) {
 	desired.Keys[0].set("productUserChargeMultiplier", "1.500000")
 	desired.Keys[0].set("cap", nil)
 	desired.Routers[0].set("name", "Updated router")
-	desired.Routers[0].set("members", []string{"backup"})
+	desired.Routers[0].set("members", []string{"secondary"})
 	desired.Routers[0].set("defaultSelector", nil)
-	document := fields(map[string]any{"version": 1, "app": desired.App, "keys": desired.Keys, "routingKeys": desired.Routers})
+	document := fields(map[string]any{"version": 1, "app": desired.App, "keys": desired.resourceValue("keys", desired.Keys), "routingKeys": desired.resourceValue("routingKeys", desired.Routers)})
 	if err := os.WriteFile(config, encoded(document), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -696,7 +727,7 @@ func TestRoutingSecretRecoveryRecordsReplacementID(t *testing.T) {
 	_, _, _ = loadJSON(journalPath(plan), &journal)
 	journal.Complete, journal.FinalDigest = false, ""
 	journal.Steps[len(journal.Steps)-1].Done = false
-	delete(service.Secrets.(*memorySecrets).values, plan.ID+"/router:0")
+	delete(service.Secrets.(*memorySecrets).values, plan.ID+"/router:public")
 	if err := os.WriteFile(config, []byte(newManifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -752,8 +783,8 @@ func TestEmptySectionsRevokeOnlyLocallyManagedResources(t *testing.T) {
 	var document Fields
 	data, _ := os.ReadFile(config)
 	_ = json.Unmarshal(data, &document)
-	document.set("keys", []any{})
-	document.set("routingKeys", []any{})
+	document.set("keys", map[string]any{})
+	document.set("routingKeys", map[string]any{})
 	_ = os.WriteFile(config, encoded(document), 0600)
 	result, err := service.Plan(context.Background(), "", config, path+".delete")
 	if err != nil {

@@ -55,12 +55,35 @@ func TestCloneClearsOwnedIDsAndPreservesSourceAndConfiguration(t *testing.T) {
 	source := filepath.Join(directory, "prod.json")
 	destination := filepath.Join(directory, "dev.json")
 	input := []byte(`{
-		"version":1,
-		"app":{"id":"app_prod","name":"Production","allowedModels":["model_a"],"creditUnitsPerUsd":"1000.000000000001"},
-		"keys":[{"id":"key_prod","name":"Backend","routingAlias":"backend","cap":null,"productUserChargeMultiplier":"1.000001"}],
-		"routingKeys":[{"id":"router_prod","name":"Router","members":["backend"],"defaultSelector":null}],
-		"providerCredentials":[]
-	}`)
+  "app": {
+    "id": "app_prod",
+    "name": "Production",
+    "allowedModels": [
+      "model_a"
+    ],
+    "creditUnitsPerUsd": "1000.000000000001"
+  },
+  "keys": {
+    "backend": {
+      "cap": null,
+      "id": "key_prod",
+      "name": "Backend",
+      "productUserChargeMultiplier": "1.000001"
+    }
+  },
+  "providerCredentials": {},
+  "routingKeys": {
+    "public": {
+      "defaultSelector": null,
+      "id": "router_prod",
+      "members": [
+        "backend"
+      ],
+      "name": "Router"
+    }
+  },
+  "version": 1
+}`)
 	if err := os.WriteFile(source, input, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -75,14 +98,14 @@ func TestCloneClearsOwnedIDsAndPreservesSourceAndConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := cloned.data["app"].(map[string]any)
-	key := cloned.data["keys"].([]any)[0].(map[string]any)
-	router := cloned.data["routingKeys"].([]any)[0].(map[string]any)
+	key := cloned.data["keys"].(map[string]any)["backend"].(map[string]any)
+	router := cloned.data["routingKeys"].(map[string]any)["public"].(map[string]any)
 	for _, resource := range []map[string]any{app, key, router} {
 		if _, exists := resource["id"]; exists {
 			t.Fatal("an app-owned ID survived cloning")
 		}
 	}
-	if app["name"] != "Development" || app["creditUnitsPerUsd"] != "1000.000000000001" || key["productUserChargeMultiplier"] != "1.000001" || key["routingAlias"] != "backend" || router["members"].([]any)[0] != "backend" {
+	if app["name"] != "Development" || app["creditUnitsPerUsd"] != "1000.000000000001" || key["productUserChargeMultiplier"] != "1.000001" || router["members"].([]any)[0] != "backend" {
 		t.Fatal("clone changed configuration or routing references")
 	}
 	if _, exists := key["cap"]; !exists || key["cap"] != nil {
@@ -91,7 +114,7 @@ func TestCloneClearsOwnedIDsAndPreservesSourceAndConfiguration(t *testing.T) {
 	if _, exists := key["allowedModels"]; exists {
 		t.Fatal("clone replaced inherited models with an explicit policy")
 	}
-	if _, exists := cloned.data["serviceKeys"]; exists || len(cloned.data["providerCredentials"].([]any)) != 0 {
+	if _, exists := cloned.data["serviceKeys"]; exists || len(cloned.data["providerCredentials"].(map[string]any)) != 0 {
 		t.Fatal("clone changed omitted or empty resource sections")
 	}
 	if _, err := Clone(source, destination, "Another name"); err == nil {
@@ -108,7 +131,7 @@ func TestCloneRejectsSharedCredentialsWithoutCreatingADestination(t *testing.T) 
 		source := filepath.Join(directory, "source.json")
 		destination := filepath.Join(directory, "clone.json")
 		resource := map[string]any{"id": "shared_id", "name": "Shared resource"}
-		data := map[string]any{"version": 1, "app": map[string]any{"id": "app_existing", "name": "Example", "allowedModels": []string{"model_a"}}, section: []any{resource}}
+		data := map[string]any{"version": 1, "app": map[string]any{"id": "app_existing", "name": "Example", "allowedModels": []string{"model_a"}}, section: map[string]any{"shared": resource}}
 		encoded, _ := json.Marshal(data)
 		if err := os.WriteFile(source, encoded, 0600); err != nil {
 			t.Fatal(err)

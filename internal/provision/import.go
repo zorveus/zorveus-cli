@@ -54,16 +54,18 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 	if err != nil {
 		return ImportResult{}, err
 	}
-	document := fields(map[string]any{"version": 1, "app": importedApp(app), "keys": []Fields{}, "routingKeys": []Fields{}})
-	importedKeys := []Fields{}
+	document := fields(map[string]any{"version": 1, "app": importedApp(app), "keys": map[string]Fields{}, "routingKeys": map[string]Fields{}})
+	importedKeys := map[string]Fields{}
 	state := State{Version: 1, Target: remote.target, AppID: appID, Keys: map[string]string{}, Routers: []string{}}
 	for _, key := range keys {
 		id := key.detail.Connection.ID
-		importedKeys = append(importedKeys, importedKey(key, aliases[id]))
+		entry := importedKey(key, aliases[id])
+		delete(entry, "routingAlias")
+		importedKeys[aliases[id]] = entry
 		state.Keys[aliases[id]] = id
 	}
-	importedRouters := []Fields{}
-	for _, router := range routers {
+	importedRouters := map[string]Fields{}
+	for index, router := range routers {
 		members := []string{}
 		for _, member := range router.Members {
 			members = append(members, aliases[member.ConnectionID])
@@ -73,7 +75,7 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 		if router.Name != nil {
 			entry.set("name", *router.Name)
 		}
-		importedRouters = append(importedRouters, entry)
+		importedRouters["router_"+strconv.Itoa(index+1)] = entry
 		state.Routers = append(state.Routers, router.KeyID)
 	}
 	document.set("keys", importedKeys)

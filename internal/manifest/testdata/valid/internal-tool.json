@@ -7,11 +7,10 @@
       "<model-id>"
     ]
   },
-  "keys": [
-    {
+  "keys": {
+    "backend": {
       "id": "key_backend",
       "name": "Backend",
-      "routingAlias": "backend",
       "creditMode": "enforce",
       "cap": {
         "amount": "100",
@@ -19,5 +18,5 @@
         "period": "monthly"
       }
     }
-  ]
+  }
 }

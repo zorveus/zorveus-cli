@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/api"
@@ -84,7 +83,7 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 		if err := requireFinishedApply(plan.Config); err != nil {
 			return ApplyResult{}, err
 		}
-		fresh, err := service.build(ctx, plan.Target.Origin, plan.Config)
+		fresh, err := service.buildFrom(ctx, plan.Target.Origin, plan.Config, plan.Source)
 		if err != nil {
 			return ApplyResult{}, err
 		}
@@ -143,6 +142,9 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 }
 
 func samePlan(left, right Plan) bool {
+	if left.Source != right.Source || left.SourceDigest != right.SourceDigest {
+		return false
+	}
 	var leftManifest, rightManifest Fields
 	if json.Unmarshal(left.Manifest, &leftManifest) != nil || json.Unmarshal(right.Manifest, &rightManifest) != nil {
 		return false
@@ -308,7 +310,9 @@ func project(current, desired Fields) Fields {
 
 func (run *execution) finish() error {
 	var desired Manifest
-	_ = json.Unmarshal(run.plan.Manifest, &desired)
+	if err := json.Unmarshal(run.plan.Manifest, &desired); err != nil {
+		return err
+	}
 	expectedAppID := run.plan.Bindings["app"]
 	if run.journal.FinalDigest != "" {
 		var saved State
@@ -335,7 +339,7 @@ func (run *execution) finish() error {
 	if desired.Routers != nil {
 		state.Routers = []string{}
 		for index := range desired.Routers {
-			state.Routers = append(state.Routers, run.id("router:"+strconv.Itoa(index)))
+			state.Routers = append(state.Routers, run.id(desired.resourceRef("routingKeys", index)))
 		}
 	}
 	var document Fields
@@ -346,25 +350,25 @@ func (run *execution) finish() error {
 		for _, key := range desired.Keys {
 			key.set("id", state.Keys[key.text("routingAlias")])
 		}
-		document.set("keys", desired.Keys)
+		document.set("keys", desired.resourceValue("keys", desired.Keys))
 	}
 	if desired.Routers != nil {
 		for index, router := range desired.Routers {
 			router.set("id", state.Routers[index])
 		}
-		document.set("routingKeys", desired.Routers)
+		document.set("routingKeys", desired.resourceValue("routingKeys", desired.Routers))
 	}
 	if desired.ServiceKeys != nil {
 		for index, key := range desired.ServiceKeys {
-			key.set("id", run.id("service:"+strconv.Itoa(index)))
+			key.set("id", run.id(desired.resourceRef("serviceKeys", index)))
 		}
-		document.set("serviceKeys", desired.ServiceKeys)
+		document.set("serviceKeys", desired.resourceValue("serviceKeys", desired.ServiceKeys))
 	}
 	if desired.Providers != nil {
 		for index, credential := range desired.Providers {
-			credential.set("id", run.id("provider:"+strconv.Itoa(index)))
+			credential.set("id", run.id(desired.resourceRef("providerCredentials", index)))
 		}
-		document.set("providerCredentials", desired.Providers)
+		document.set("providerCredentials", desired.resourceValue("providerCredentials", desired.Providers))
 	}
 	final := encoded(document)
 	if _, err := manifest.Parse(final); err != nil {

@@ -102,8 +102,8 @@ func TestSharedCredentialsUseSafePlansAndExplicitSecretInputs(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	t.Setenv("TEST_PROVIDER_KEY", "private-provider-input")
 	document := readDocument(t, config)
-	document.set("serviceKeys", []any{map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
-	document.set("providerCredentials", []any{map[string]any{"name": "Primary OpenAI", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY", "routingMode": "manual_grant_only", "defaultModelPolicy": []string{"model_a"}}})
+	document.set("serviceKeys", map[string]any{"backend": map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
+	document.set("providerCredentials", map[string]any{"primary": map[string]any{"name": "Primary OpenAI", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY", "routingMode": "manual_grant_only", "defaultModelPolicy": []string{"model_a"}}})
 	writeDocument(t, config, document)
 	planAndApply(t, service, config, path)
 	if backend.providerSecret != "private-provider-input" {
@@ -173,7 +173,7 @@ func TestSharedCredentialsUseSafePlansAndExplicitSecretInputs(t *testing.T) {
 func TestMissingProviderInputStopsBeforeAnyRemoteWrite(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	document := readDocument(t, config)
-	document.set("providerCredentials", []any{map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_MISSING_PROVIDER"}})
+	document.set("providerCredentials", map[string]any{"primary": map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_MISSING_PROVIDER"}})
 	writeDocument(t, config, document)
 	t.Setenv("TEST_MISSING_PROVIDER", "")
 	if _, err := service.Plan(context.Background(), "", config, path); err != nil {
@@ -191,11 +191,11 @@ func TestMissingProviderInputStopsBeforeAnyRemoteWrite(t *testing.T) {
 func TestSharedResourceOmissionDoesNotRevokeOrganizationResources(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	document := readDocument(t, config)
-	document.set("serviceKeys", []any{map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
+	document.set("serviceKeys", map[string]any{"backend": map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
 	writeDocument(t, config, document)
 	planAndApply(t, service, config, path)
 	document = readDocument(t, config)
-	document.set("serviceKeys", []any{})
+	document.set("serviceKeys", map[string]any{})
 	writeDocument(t, config, document)
 	before := len(backend.writes)
 	planAndApply(t, service, config, path+".removed")
@@ -224,7 +224,7 @@ func TestProviderResumePreservesOriginalInputAndDoesNotRepeatCreation(t *testing
 	service, backend, _, config, path := setup(t)
 	t.Setenv("TEST_PROVIDER_KEY", "private-original-input")
 	document := readDocument(t, config)
-	document.set("providerCredentials", []any{map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
+	document.set("providerCredentials", map[string]any{"primary": map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
 	writeDocument(t, config, document)
 	if _, err := service.Plan(context.Background(), "", config, path); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestProviderRotationResumesAfterFingerprintSaveFailure(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	t.Setenv("TEST_PROVIDER_KEY", "private-original-input")
 	document := readDocument(t, config)
-	document.set("providerCredentials", []any{map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
+	document.set("providerCredentials", map[string]any{"primary": map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
 	writeDocument(t, config, document)
 	planAndApply(t, service, config, path)
 	t.Setenv("TEST_PROVIDER_KEY", "private-replacement-input")
@@ -286,7 +286,7 @@ func TestProviderRotationResumesAfterFingerprintSaveFailure(t *testing.T) {
 func TestServiceSecretRecoveryUsesStableIDRotation(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	document := readDocument(t, config)
-	document.set("serviceKeys", []any{map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
+	document.set("serviceKeys", map[string]any{"backend": map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
 	writeDocument(t, config, document)
 	if _, err := service.Plan(context.Background(), "", config, path); err != nil {
 		t.Fatal(err)
@@ -294,7 +294,7 @@ func TestServiceSecretRecoveryUsesStableIDRotation(t *testing.T) {
 	var plan Plan
 	_, _, _ = loadJSON(path, &plan)
 	store := service.Secrets.(*memorySecrets)
-	store.failAccountPrefix = plan.ID + "/service:0"
+	store.failAccountPrefix = plan.ID + "/service:backend"
 	_, err := service.Apply(context.Background(), "", path, true, false)
 	if err == nil || problem.Safe(err).ExitCode != 5 {
 		t.Fatalf("service secret delivery failure not recorded: %v", err)
@@ -307,7 +307,7 @@ func TestServiceSecretRecoveryUsesStableIDRotation(t *testing.T) {
 	if backend.serviceRotations != 1 || len(backend.services) != 1 {
 		t.Fatal("service key recovery did not rotate exactly one existing key")
 	}
-	if store.values[plan.ID+"/service:0"].Secret != "private-rotated-service-secret" {
+	if store.values[plan.ID+"/service:backend"].Secret != "private-rotated-service-secret" {
 		t.Fatal("replacement service secret was not delivered")
 	}
 	for _, write := range backend.writes[before:] {

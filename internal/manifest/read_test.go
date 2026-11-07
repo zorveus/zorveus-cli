@@ -72,13 +72,24 @@ func TestRejectedFixtures(t *testing.T) {
 
 func TestPartialUpdatesReportRemoteChecks(t *testing.T) {
 	document, err := Parse([]byte(`{
-		"version":1,
-		"app":{"id":"app_existing"},
-		"routingKeys":[
-			{"id":"router_existing","members":["remote-alias"],"defaultSelector":"remote-alias"},
-			{"id":"router_other","defaultSelector":"existing-member"}
-		]
-	}`))
+  "app": {
+    "id": "app_existing"
+  },
+  "routingKeys": {
+    "public": {
+      "defaultSelector": "remote-alias",
+      "id": "router_existing",
+      "members": [
+        "remote-alias"
+      ]
+    },
+    "public_2": {
+      "defaultSelector": "existing-member",
+      "id": "router_other"
+    }
+  },
+  "version": 1
+}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +97,48 @@ func TestPartialUpdatesReportRemoteChecks(t *testing.T) {
 	if len(checks) != 2 || checks[0].Code != "remote_alias_required" || checks[1].Code != "remote_members_required" {
 		t.Fatalf("missing deferred reference checks: %+v", checks)
 	}
-	document, err = Parse([]byte(`{"version":1,"app":{"id":"app_existing"},"keys":[{"id":"key_existing","routingAlias":"backend"}]}`))
+	document, err = Parse([]byte(`{
+  "app": {
+    "id": "app_existing"
+  },
+  "keys": {
+    "backend": {
+      "id": "key_existing"
+    }
+  },
+  "version": 1
+}`))
 	if err != nil || len(document.Result("").DeferredChecks) != 1 {
 		t.Fatalf("omitted app models should defer inheritance: %v", err)
 	}
 }
 
 func TestNullableFieldsAndRouterClearingPreserveMeaning(t *testing.T) {
-	source := []byte(`{"version":1,"app":{"id":"app_existing","creditUnitsPerUsd":null,"consent":{"defaultCap":null,"minimumCapAmount":null}},"keys":[{"id":"key_existing","routingAlias":"backend","cap":null,"productUserChargeMultiplier":null}],"routingKeys":[{"id":"router_existing","members":[],"defaultSelector":null}]}`)
+	source := []byte(`{
+  "app": {
+    "id": "app_existing",
+    "creditUnitsPerUsd": null,
+    "consent": {
+      "defaultCap": null,
+      "minimumCapAmount": null
+    }
+  },
+  "keys": {
+    "backend": {
+      "cap": null,
+      "id": "key_existing",
+      "productUserChargeMultiplier": null
+    }
+  },
+  "routingKeys": {
+    "public": {
+      "defaultSelector": null,
+      "id": "router_existing",
+      "members": []
+    }
+  },
+  "version": 1
+}`)
 	document, err := Parse(source)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +158,30 @@ func TestNullableFieldsAndRouterClearingPreserveMeaning(t *testing.T) {
 }
 
 func TestDecimalsStayExactAndAcceptBackendBoundary(t *testing.T) {
-	source := []byte(`{"version":1,"app":{"name":"Exact amounts","allowedModels":["*"],"creditUnitsPerUsd":"999999999999.999999999999","productUserChargeMultiplier":"999999999999.999999"},"keys":[{"name":"Backend","routingAlias":"backend","allowedModels":["model_a"],"cap":{"amount":"0.000000000001","currency":"USD","period":"lifetime"}}]}`)
+	source := []byte(`{
+  "app": {
+    "name": "Exact amounts",
+    "allowedModels": [
+      "*"
+    ],
+    "creditUnitsPerUsd": "999999999999.999999999999",
+    "productUserChargeMultiplier": "999999999999.999999"
+  },
+  "keys": {
+    "backend": {
+      "allowedModels": [
+        "model_a"
+      ],
+      "cap": {
+        "amount": "0.000000000001",
+        "currency": "USD",
+        "period": "lifetime"
+      },
+      "name": "Backend"
+    }
+  },
+  "version": 1
+}`)
 	document, err := Parse(source)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +194,22 @@ func TestDecimalsStayExactAndAcceptBackendBoundary(t *testing.T) {
 
 func TestValidationDoesNotReadProviderSecretInputs(t *testing.T) {
 	t.Setenv("ZORVEUS_TEST_PROVIDER_SECRET", "private-secret")
-	source := []byte(`{"version":1,"app":{"name":"Provider example","allowedModels":["model_a"]},"providerCredentials":[{"name":"Provider","provider":"openai","secretFromEnv":"ZORVEUS_TEST_PROVIDER_SECRET"}]}`)
+	source := []byte(`{
+  "app": {
+    "name": "Provider example",
+    "allowedModels": [
+      "model_a"
+    ]
+  },
+  "providerCredentials": {
+    "primary": {
+      "name": "Provider",
+      "provider": "openai",
+      "secretFromEnv": "ZORVEUS_TEST_PROVIDER_SECRET"
+    }
+  },
+  "version": 1
+}`)
 	document, err := Parse(source)
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +237,7 @@ func assertProblem(t *testing.T, err error, code, pointer string) {
 	t.Helper()
 	var failure *problem.Error
 	if !errors.As(err, &failure) || failure.Code != code || failure.Pointer == nil || *failure.Pointer != pointer || failure.ExitCode != 2 {
-		t.Fatalf("expected %s at %q, got %#v", code, pointer, err)
+		actual, _ := json.Marshal(err)
+		t.Fatalf("expected %s at %q, got %s", code, pointer, actual)
 	}
 }

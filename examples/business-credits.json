@@ -2,14 +2,15 @@
   "version": 1,
   "app": {
     "name": "Business assistant",
-    "allowedModels": ["*"],
+    "allowedModels": [
+      "*"
+    ],
     "creditUnitsPerUsd": "1000",
     "productUserChargeMultiplier": "2"
   },
-  "keys": [
-    {
+  "keys": {
+    "starter": {
       "name": "Starter plan",
-      "routingAlias": "starter",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -18,9 +19,8 @@
         "period": "monthly"
       }
     },
-    {
+    "business": {
       "name": "Business plan",
-      "routingAlias": "business",
       "creditMode": "enforce",
       "overrunPolicy": "carry_overrun_forward",
       "productUserChargeMultiplier": "1.5",
@@ -30,17 +30,22 @@
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "primary": {
       "name": "Primary backend",
-      "members": ["starter", "business"],
+      "members": [
+        "starter",
+        "business"
+      ],
       "defaultSelector": null
     },
-    {
+    "business": {
       "name": "Business integration",
-      "members": ["business"],
+      "members": [
+        "business"
+      ],
       "defaultSelector": "business"
     }
-  ]
+  }
 }

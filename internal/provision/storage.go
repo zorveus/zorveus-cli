@@ -155,7 +155,9 @@ func loadManifest(path string) (Manifest, []byte, []byte, error) {
 		return Manifest{}, nil, nil, err
 	}
 	var result Manifest
-	_ = json.Unmarshal(canonical, &result)
+	if err := json.Unmarshal(canonical, &result); err != nil {
+		return Manifest{}, nil, nil, err
+	}
 	return result, original, canonical, nil
 }
 

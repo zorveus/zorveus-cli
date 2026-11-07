@@ -21,7 +21,7 @@ func TestReplanningReplacesTheSavedPlanWithCurrentChanges(t *testing.T) {
 	if _, _, err := loadJSON(path, &first); err != nil {
 		t.Fatal(err)
 	}
-	edited := strings.Replace(newManifest, `"name":"Demo"`, `"name":"Updated app"`, 1)
+	edited := strings.Replace(newManifest, `"name": "Demo"`, `"name": "Updated app"`, 1)
 	if err := os.WriteFile(config, []byte(edited), 0600); err != nil {
 		t.Fatal(err)
 	}

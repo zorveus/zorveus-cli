@@ -1,229 +1,229 @@
 [
   {
     "name": "unsupported version",
-    "document": "{\"version\": 2, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 3, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "unsupported_version",
     "pointer": "/version"
   },
   {
     "name": "string version",
-    "document": "{\"version\": \"1\", \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": \"1\", \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "unsupported_version",
     "pointer": "/version"
   },
   {
     "name": "unknown root field",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"secret\": \"private-secret\"}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"secret\": \"private-secret\"}",
     "code": "unknown_field",
     "pointer": "/secret"
   },
   {
     "name": "unknown nested field",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"secret\": \"private-secret\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"secret\": \"private-secret\"}}}",
     "code": "unknown_field",
-    "pointer": "/keys/0/secret"
+    "pointer": "/keys/backend/secret"
   },
   {
     "name": "null identity",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": null}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": null}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_type",
     "pointer": "/app/id"
   },
   {
     "name": "empty identity",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
     "pointer": "/app/id"
   },
   {
     "name": "invalid identity",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app private-secret\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app private-secret\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
     "pointer": "/app/id"
   },
   {
     "name": "empty app name",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
     "pointer": "/app/name"
   },
   {
     "name": "blank app name",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"   \", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"   \", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
     "pointer": "/app/name"
   },
   {
-    "name": "invalid alias",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"Bad.Alias\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "name": "invalid resource name",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"Bad.Alias\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/routingAlias"
+    "pointer": "/keys/Bad.Alias"
   },
   {
     "name": "unlisted model",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"allowedModels\": [\"model_b\"]}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"allowedModels\": [\"model_b\"]}}}",
     "code": "model_not_allowed",
-    "pointer": "/keys/0/allowedModels/0"
+    "pointer": "/keys/backend/allowedModels/0"
   },
   {
     "name": "numeric cap",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": 1.5, \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": 1.5, \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_type",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "zero cap",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"0\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"0\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_decimal",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "negative cap",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"-1\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"-1\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "NaN cap",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"NaN\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"NaN\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "infinite cap",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"Infinity\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"Infinity\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "exponent notation",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"1e2\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"1e2\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "cap too large",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"1000000000000\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"1000000000000\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "decimal_out_of_bounds",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "cap precision",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"0.0000000000001\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"0.0000000000001\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "decimal_out_of_bounds",
-    "pointer": "/keys/0/cap/amount"
+    "pointer": "/keys/backend/cap/amount"
   },
   {
     "name": "invalid period",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"weekly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"weekly\"}}}}",
     "code": "invalid_choice",
-    "pointer": "/keys/0/cap/period"
+    "pointer": "/keys/backend/cap/period"
   },
   {
     "name": "invalid currency",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"US\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"US\", \"period\": \"monthly\"}}}}",
     "code": "invalid_format",
-    "pointer": "/keys/0/cap/currency"
+    "pointer": "/keys/backend/cap/currency"
   },
   {
     "name": "multiplier below one",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"productUserChargeMultiplier\": \"0.5\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"productUserChargeMultiplier\": \"0.5\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_decimal",
     "pointer": "/app/productUserChargeMultiplier"
   },
   {
     "name": "multiplier precision",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"productUserChargeMultiplier\": \"1.0000001\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"productUserChargeMultiplier\": \"1.0000001\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "decimal_out_of_bounds",
     "pointer": "/app/productUserChargeMultiplier"
   },
   {
     "name": "zero credit rate",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"creditUnitsPerUsd\": \"0\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"creditUnitsPerUsd\": \"0\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_decimal",
     "pointer": "/app/creditUnitsPerUsd"
   },
   {
     "name": "empty model list",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": []}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": []}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "schema_validation_failed",
     "pointer": "/app/allowedModels"
   },
   {
-    "name": "duplicate alias",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}, {\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
-    "code": "duplicate_alias",
-    "pointer": "/keys/1/routingAlias"
+    "name": "duplicate resource name",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\":{\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}},\"backend\":{\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
+    "code": "duplicate_json_key",
+    "pointer": "/keys/backend"
   },
   {
     "name": "duplicate IDs",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app_existing\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"id\": \"same_id\"}, {\"id\": \"same_id\", \"routingAlias\": \"other\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app_existing\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"id\": \"same_id\"}, \"other\": {\"id\": \"same_id\"}}}",
     "code": "duplicate_id",
-    "pointer": "/keys/1/id"
+    "pointer": "/keys/other/id"
   },
   {
     "name": "existing child without existing app",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"id\": \"key_existing\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}, \"id\": \"key_existing\"}}}",
     "code": "app_identity_required",
-    "pointer": "/keys/0/id"
+    "pointer": "/keys/backend/id"
   },
   {
     "name": "unknown member",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"name\": \"Router\", \"members\": [\"missing\"]}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"name\": \"Router\", \"members\": [\"missing\"]}}}",
     "code": "unknown_member",
-    "pointer": "/routingKeys/0/members/0"
+    "pointer": "/routingKeys/public/members/0"
   },
   {
     "name": "invalid default",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"name\": \"Router\", \"members\": [\"backend\"], \"defaultSelector\": \"missing\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"name\": \"Router\", \"members\": [\"backend\"], \"defaultSelector\": \"missing\"}}}",
     "code": "invalid_default_selector",
-    "pointer": "/routingKeys/0/defaultSelector"
+    "pointer": "/routingKeys/public/defaultSelector"
   },
   {
     "name": "missing members",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"name\": \"Router\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"name\": \"Router\"}}}",
     "code": "required_field",
-    "pointer": "/routingKeys/0/members"
+    "pointer": "/routingKeys/public/members"
   },
   {
     "name": "empty new router",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"name\": \"Router\", \"members\": [], \"defaultSelector\": null}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"name\": \"Router\", \"members\": [], \"defaultSelector\": null}}}",
     "code": "schema_validation_failed",
-    "pointer": "/routingKeys/0/members"
+    "pointer": "/routingKeys/public/members"
   },
   {
     "name": "repeated member",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"name\": \"Router\", \"members\": [\"backend\", \"backend\"]}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"name\": \"Router\", \"members\": [\"backend\", \"backend\"]}}}",
     "code": "schema_validation_failed",
-    "pointer": "/routingKeys/0/members"
+    "pointer": "/routingKeys/public/members"
   },
   {
     "name": "empty router without clearing default",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app_existing\"}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"routingKeys\": [{\"id\": \"router_existing\", \"members\": []}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"id\": \"app_existing\"}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"routingKeys\": {\"public\": {\"id\": \"router_existing\", \"members\": []}}}",
     "code": "required_field",
-    "pointer": "/routingKeys/0/defaultSelector"
+    "pointer": "/routingKeys/public/defaultSelector"
   },
   {
     "name": "inverted cap range",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"consent\": {\"minimumCapAmount\": \"20\", \"maximumCapAmount\": \"10\"}}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"consent\": {\"minimumCapAmount\": \"20\", \"maximumCapAmount\": \"10\"}}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_cap_policy",
     "pointer": "/app/consent/maximumCapAmount"
   },
   {
     "name": "default outside cap range",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"consent\": {\"minimumCapAmount\": \"20\", \"defaultCap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"consent\": {\"minimumCapAmount\": \"20\", \"defaultCap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_cap_policy",
     "pointer": "/app/consent/defaultCap/amount"
   },
   {
     "name": "inline provider secret",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}], \"providerCredentials\": [{\"name\": \"Provider\", \"provider\": \"openai\", \"secret\": \"private-secret\", \"secretFromEnv\": \"PROVIDER_KEY\"}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"]}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}, \"providerCredentials\": {\"primary\": {\"name\": \"Provider\", \"provider\": \"openai\", \"secret\": \"private-secret\", \"secretFromEnv\": \"PROVIDER_KEY\"}}}",
     "code": "unknown_field",
-    "pointer": "/providerCredentials/0/secret"
+    "pointer": "/providerCredentials/primary/secret"
   },
   {
     "name": "redirect credentials",
-    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"oauth\": {\"redirectUris\": [\"https://name:private-secret@example.test/callback\"]}}, \"keys\": [{\"name\": \"Backend\", \"routingAlias\": \"backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}]}",
+    "document": "{\"version\": 1, \"app\": {\"name\": \"Example\", \"allowedModels\": [\"model_a\"], \"oauth\": {\"redirectUris\": [\"https://name:private-secret@example.test/callback\"]}}, \"keys\": {\"backend\": {\"name\": \"Backend\", \"cap\": {\"amount\": \"10\", \"currency\": \"USD\", \"period\": \"monthly\"}}}}",
     "code": "invalid_redirect_uri",
     "pointer": "/app/oauth/redirectUris/0"
   },

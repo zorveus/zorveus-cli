@@ -8,11 +8,10 @@
       "<premium-model-id>"
     ]
   },
-  "keys": [
-    {
+  "keys": {
+    "free": {
       "id": "key_free",
       "name": "Free plan",
-      "routingAlias": "free",
       "allowedModels": [
         "<standard-model-id>"
       ],
@@ -24,10 +23,9 @@
         "period": "monthly"
       }
     },
-    {
+    "pro": {
       "id": "key_pro",
       "name": "Pro plan",
-      "routingAlias": "pro",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -36,9 +34,9 @@
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "public": {
       "id": "key_router",
       "name": "Application backend",
       "members": [
@@ -47,5 +45,5 @@
       ],
       "defaultSelector": null
     }
-  ]
+  }
 }

@@ -18,6 +18,8 @@ Select a use case to jump to its complete JSON and explanation. The separate JSO
 
 For the commands shared by every example, see [Try an example](#try-an-example). For model lists, amounts, and routing aliases, see [Customize the configuration](#customize-the-configuration).
 
+To carry changes into an existing production app, see [Promote an example to production](#promote-an-example-to-production).
+
 ## Try an example
 
 Start with `internal-tool.json` if you want an inference key. Start with `minimal.json` if you only want to test creating and updating an app.
@@ -52,7 +54,23 @@ Most examples use `allowedModels: ["*"]`. Replace it with specific model identif
 
 Amounts, conversion rates, and multipliers are decimal strings. For example, use `"100"`, not `100`. A cap limits spending; applying it does not buy credits or fund a wallet.
 
-An inference key can work directly. A router is useful when one credential needs to select between multiple keys. Router `members` refer to each key's `routingAlias`; the CLI resolves those aliases to backend resource IDs.
+An inference key can work directly. A router is useful when one credential needs to select between multiple keys. Router `members` refer to the object names in `keys`; the CLI resolves those aliases to backend resource IDs.
+
+## Promote an example to production
+
+Keep the development and production manifests returned by apply. Resource object names identify matching roles in the two files. To bring development settings into production:
+
+```sh
+zorveus login
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+zorveus apply --plan zorveus.prod.plan.json --yes
+```
+
+Select the production organization during login. Plan leaves both files unchanged. Apply updates the production JSON with source settings and production IDs. New entries receive new production IDs; later plans keep them.
+
+`keys.backend` matches `keys.backend`, and `routingKeys.primary` matches `routingKeys.primary`. Keep those object names stable across environments. Display names may differ. Removing a managed key or router from an explicit object can propose revocation, requiring `--allow-delete` during apply.
+
+See the [cross-app planning guide](../docs/promotion.md) for complete examples and credential rules.
 
 ## Minimal app
 
@@ -63,7 +81,9 @@ Use [minimal.json](minimal.json) to try the app lifecycle before adding credenti
   "version": 1,
   "app": {
     "name": "My first app",
-    "allowedModels": ["*"]
+    "allowedModels": [
+      "*"
+    ]
   }
 }
 ```
@@ -81,12 +101,13 @@ Use [internal-tool.json](internal-tool.json) when a server-side tool needs one i
   "version": 1,
   "app": {
     "name": "Internal assistant",
-    "allowedModels": ["*"]
+    "allowedModels": [
+      "*"
+    ]
   },
-  "keys": [
-    {
+  "keys": {
+    "backend": {
       "name": "Backend",
-      "routingAlias": "backend",
       "creditMode": "enforce_if_present",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -95,7 +116,7 @@ Use [internal-tool.json](internal-tool.json) when a server-side tool needs one i
         "period": "monthly"
       }
     }
-  ]
+  }
 }
 ```
 
@@ -114,12 +135,13 @@ Use [subscriptions.json](subscriptions.json) when your application has Free and 
   "version": 1,
   "app": {
     "name": "Subscription assistant",
-    "allowedModels": ["*"]
+    "allowedModels": [
+      "*"
+    ]
   },
-  "keys": [
-    {
+  "keys": {
+    "free": {
       "name": "Free plan",
-      "routingAlias": "free",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -128,9 +150,8 @@ Use [subscriptions.json](subscriptions.json) when your application has Free and 
         "period": "monthly"
       }
     },
-    {
+    "pro": {
       "name": "Pro plan",
-      "routingAlias": "pro",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -139,14 +160,17 @@ Use [subscriptions.json](subscriptions.json) when your application has Free and 
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "primary": {
       "name": "Subscription backend",
-      "members": ["free", "pro"],
+      "members": [
+        "free",
+        "pro"
+      ],
       "defaultSelector": null
     }
-  ]
+  }
 }
 ```
 
@@ -167,14 +191,15 @@ Use [business-credits.json](business-credits.json) when your product presents cu
   "version": 1,
   "app": {
     "name": "Business assistant",
-    "allowedModels": ["*"],
+    "allowedModels": [
+      "*"
+    ],
     "creditUnitsPerUsd": "1000",
     "productUserChargeMultiplier": "2"
   },
-  "keys": [
-    {
+  "keys": {
+    "starter": {
       "name": "Starter plan",
-      "routingAlias": "starter",
       "creditMode": "enforce",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -183,9 +208,8 @@ Use [business-credits.json](business-credits.json) when your product presents cu
         "period": "monthly"
       }
     },
-    {
+    "business": {
       "name": "Business plan",
-      "routingAlias": "business",
       "creditMode": "enforce",
       "overrunPolicy": "carry_overrun_forward",
       "productUserChargeMultiplier": "1.5",
@@ -195,19 +219,24 @@ Use [business-credits.json](business-credits.json) when your product presents cu
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "primary": {
       "name": "Primary backend",
-      "members": ["starter", "business"],
+      "members": [
+        "starter",
+        "business"
+      ],
       "defaultSelector": null
     },
-    {
+    "business": {
       "name": "Business integration",
-      "members": ["business"],
+      "members": [
+        "business"
+      ],
       "defaultSelector": "business"
     }
-  ]
+  }
 }
 ```
 
@@ -228,11 +257,18 @@ Use [oauth-wallet.json](oauth-wallet.json) when users authorize your application
   "version": 1,
   "app": {
     "name": "Connected assistant",
-    "allowedModels": ["*"],
-    "allowedScopes": ["inference:write", "models:*"],
+    "allowedModels": [
+      "*"
+    ],
+    "allowedScopes": [
+      "inference:write",
+      "models:*"
+    ],
     "oauth": {
       "clientType": "public",
-      "redirectUris": ["https://example.com/oauth/callback"]
+      "redirectUris": [
+        "https://example.com/oauth/callback"
+      ]
     },
     "consent": {
       "defaultCap": {
@@ -263,12 +299,13 @@ Use [byok-openai.json](byok-openai.json) when you want eligible inference reques
   "version": 1,
   "app": {
     "name": "OpenAI document processor",
-    "allowedModels": ["openai/gpt-4o-mini"]
+    "allowedModels": [
+      "openai/gpt-4o-mini"
+    ]
   },
-  "keys": [
-    {
+  "keys": {
+    "processor": {
       "name": "Processing backend",
-      "routingAlias": "processor",
       "creditMode": "enforce_if_present",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -277,16 +314,18 @@ Use [byok-openai.json](byok-openai.json) when you want eligible inference reques
         "period": "monthly"
       }
     }
-  ],
-  "providerCredentials": [
-    {
+  },
+  "providerCredentials": {
+    "openai": {
       "name": "OpenAI primary",
       "provider": "openai",
       "secretFromEnv": "OPENAI_API_KEY",
       "routingMode": "auto_resolve",
-      "defaultModelPolicy": ["openai/gpt-4o-mini"]
+      "defaultModelPolicy": [
+        "openai/gpt-4o-mini"
+      ]
     }
-  ]
+  }
 }
 ```
 
@@ -305,14 +344,19 @@ Use [service-key-backend.json](service-key-backend.json) when your backend needs
   "version": 1,
   "app": {
     "name": "Customer assistant",
-    "allowedModels": ["*"]
+    "allowedModels": [
+      "*"
+    ]
   },
-  "serviceKeys": [
-    {
+  "serviceKeys": {
+    "customers": {
       "name": "Customer management backend",
-      "scopes": ["product_users:read", "product_users:write"]
+      "scopes": [
+        "product_users:read",
+        "product_users:write"
+      ]
     }
-  ]
+  }
 }
 ```
 

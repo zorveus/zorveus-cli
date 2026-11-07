@@ -35,7 +35,11 @@ func TestImportPreservesSelectorsAndImmediatelyConverges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if desired.Keys[0].text("routingAlias") != "primary" || desired.Keys[1].text("routingAlias") != "backup" || desired.Routers[0].text("id") != "router_1" {
+	keys := map[string]string{}
+	for _, key := range desired.Keys {
+		keys[key.text("routingAlias")] = key.text("id")
+	}
+	if keys["primary"] != "conn_1" || keys["secondary"] != "conn_2" || desired.Routers[0].text("id") != "router_1" {
 		t.Fatal("import changed identities or selectors")
 	}
 	plan, err := service.Plan(context.Background(), "", imported, path+".imported")
@@ -130,7 +134,7 @@ func TestStatusShowsDriftRevocationMissingResourcesAndLastApply(t *testing.T) {
 func TestStatusReportsPendingRemovalsAndPreservesOmittedSections(t *testing.T) {
 	service, backend, _, config, path := setup(t)
 	planAndApply(t, service, config, path)
-	writeDocument(t, config, fields(map[string]any{"version": 1, "app": map[string]string{"id": "app_a"}, "keys": []any{}, "routingKeys": []any{}}))
+	writeDocument(t, config, fields(map[string]any{"version": 1, "app": map[string]string{"id": "app_a"}, "keys": map[string]any{}, "routingKeys": map[string]any{}}))
 	status, err := service.Status(context.Background(), "", config)
 	if err != nil || status.InSync || len(status.Resources) != 4 {
 		t.Fatalf("managed removals not reported: %v %+v", err, status.Resources)

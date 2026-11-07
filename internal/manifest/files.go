@@ -35,7 +35,7 @@ func Clone(source, destination, name string) (FileResult, error) {
 		return FileResult{}, err
 	}
 	for _, section := range []string{"serviceKeys", "providerCredentials"} {
-		resources, _ := document.data[section].([]any)
+		resources := document.Resources(section)
 		if len(resources) > 0 {
 			return FileResult{}, invalid("shared_clone_policy_required", "Cloning shared organization credentials requires a reuse or replacement policy, which is not implemented yet. Prepare a separate manifest without those sections.", "/"+section)
 		}
@@ -46,9 +46,8 @@ func Clone(source, destination, name string) (FileResult, error) {
 		app["name"] = name
 	}
 	for _, section := range []string{"keys", "routingKeys"} {
-		resources, _ := document.data[section].([]any)
-		for _, resource := range resources {
-			delete(resource.(map[string]any), "id")
+		for _, resource := range document.Resources(section) {
+			delete(resource.Fields, "id")
 		}
 	}
 	encoded, err := encodeAndValidate(document.data)

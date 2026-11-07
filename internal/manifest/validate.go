@@ -31,11 +31,10 @@ func (document *Document) validate() error {
 }
 
 func validateProviderSettings(data map[string]any) error {
-	credentials, _ := data["providerCredentials"].([]any)
-	for index, entry := range credentials {
-		credential := entry.(map[string]any)
+	for _, entry := range resourceEntries(data, "providerCredentials") {
+		credential := entry.Fields
 		config, _ := credential["providerConfig"].(map[string]any)
-		pointer := resourcePointer("providerCredentials", index) + "/providerConfig"
+		pointer := entry.Pointer + "/providerConfig"
 		_, configProvided := credential["providerConfig"]
 		provider, _ := credential["provider"].(string)
 		if credential["id"] == nil || (configProvided && provider != "") {
@@ -82,17 +81,16 @@ func validateIdentities(data map[string]any) error {
 		ids[id] = true
 	}
 	for _, section := range []string{"keys", "routingKeys", "serviceKeys", "providerCredentials"} {
-		resources, _ := data[section].([]any)
-		for index, resource := range resources {
-			id, exists := resource.(map[string]any)["id"].(string)
+		for _, resource := range resourceEntries(data, section) {
+			id, exists := resource.Fields["id"].(string)
 			if !exists {
 				continue
 			}
 			if (section == "keys" || section == "routingKeys") && app["id"] == nil {
-				return invalid("app_identity_required", "Existing app-owned resources require the existing app's ID.", resourcePointer(section, index)+"/id")
+				return invalid("app_identity_required", "Existing app-owned resources require the existing app's ID.", resource.Pointer+"/id")
 			}
 			if ids[id] {
-				return invalid("duplicate_id", "A resource ID appears more than once in the manifest.", resourcePointer(section, index)+"/id")
+				return invalid("duplicate_id", "A resource ID appears more than once in the manifest.", resource.Pointer+"/id")
 			}
 			ids[id] = true
 		}
@@ -102,8 +100,8 @@ func validateIdentities(data map[string]any) error {
 
 func (document *Document) validateModels() error {
 	appModels := document.view.App.AllowedModels
-	for index, key := range document.view.Keys {
-		pointer := resourcePointer("keys", index) + "/allowedModels"
+	for _, key := range document.view.Keys {
+		pointer := key.Pointer + "/allowedModels"
 		if appModels == nil {
 			document.deferCheck("remote_models_required", pointer, "Planning must read the app's current model permissions before resolving this key's policy.")
 			continue
@@ -122,14 +120,11 @@ func (document *Document) validateModels() error {
 
 func (document *Document) validateRouting() error {
 	aliases := make(map[string]bool)
-	for index, key := range document.view.Keys {
-		if aliases[key.RoutingAlias] {
-			return invalid("duplicate_alias", "Each inference key must have a distinct routingAlias within the app.", resourcePointer("keys", index)+"/routingAlias")
-		}
+	for _, key := range document.view.Keys {
 		aliases[key.RoutingAlias] = true
 	}
-	for index, router := range document.view.RoutingKeys {
-		pointer := resourcePointer("routingKeys", index)
+	for _, router := range document.view.RoutingKeys {
+		pointer := router.Pointer
 		if router.DefaultSelector != nil {
 			if router.Members == nil {
 				document.deferCheck("remote_members_required", pointer+"/defaultSelector", "Planning must check this selector against the router's existing members.")
@@ -146,7 +141,7 @@ func (document *Document) validateRouting() error {
 				document.deferCheck("remote_alias_required", location, "The keys section is omitted. Planning must resolve this alias from the CLI's saved configuration.")
 				continue
 			}
-			return invalid("unknown_member", "A routing member must reference a declared inference key's routingAlias.", location)
+			return invalid("unknown_member", "A routing member must reference a declared inference key.", location)
 		}
 	}
 	return nil
@@ -240,10 +235,6 @@ func decimalValue(value *string) *big.Rat {
 	}
 	amount, _ := new(big.Rat).SetString(*value)
 	return amount
-}
-
-func resourcePointer(section string, index int) string {
-	return "/" + section + "/" + strconv.Itoa(index)
 }
 
 func validateRedirectURIs(data map[string]any) error {

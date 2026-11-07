@@ -54,11 +54,13 @@ func (f Fields) only(names ...string) Fields {
 }
 
 type Manifest struct {
-	App         Fields   `json:"app"`
-	Keys        []Fields `json:"keys"`
-	Routers     []Fields `json:"routingKeys"`
-	ServiceKeys []Fields `json:"serviceKeys"`
-	Providers   []Fields `json:"providerCredentials"`
+	Version       int      `json:"version"`
+	App           Fields   `json:"app"`
+	Keys          []Fields `json:"keys"`
+	Routers       []Fields `json:"routingKeys"`
+	ServiceKeys   []Fields `json:"serviceKeys"`
+	Providers     []Fields `json:"providerCredentials"`
+	resourceNames map[string][]string
 }
 
 type Member struct {
@@ -114,6 +116,8 @@ type Plan struct {
 	ConfigDigest string            `json:"config_digest"`
 	StateDigest  string            `json:"state_digest"`
 	Manifest     json.RawMessage   `json:"manifest"`
+	Source       string            `json:"source_config,omitempty"`
+	SourceDigest string            `json:"source_config_digest,omitempty"`
 	Steps        []Step            `json:"steps"`
 	Scopes       []string          `json:"required_scopes"`
 	Bindings     map[string]string `json:"bindings"`

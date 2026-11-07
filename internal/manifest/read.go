@@ -46,12 +46,14 @@ type appView struct {
 }
 
 type keyView struct {
+	Pointer       string   `json:"-"`
 	ID            string   `json:"id"`
-	RoutingAlias  string   `json:"routingAlias"`
+	RoutingAlias  string   `json:"-"`
 	AllowedModels []string `json:"allowedModels"`
 }
 
 type routerView struct {
+	Pointer         string   `json:"-"`
 	ID              string   `json:"id"`
 	Members         []string `json:"members"`
 	DefaultSelector *string  `json:"defaultSelector"`
@@ -104,8 +106,8 @@ func Parse(data []byte) (*Document, error) {
 		return nil, err
 	}
 	document := &Document{data: object, checks: []Check{}}
-	if err := json.Unmarshal(data, &document.view); err != nil {
-		return nil, invalid("invalid_manifest", "The manifest could not be read as version 1.", "")
+	if err := document.readView(); err != nil {
+		return nil, invalid("invalid_manifest", "The manifest could not be read.", "")
 	}
 	if err := document.validate(); err != nil {
 		return nil, err
@@ -114,7 +116,7 @@ func Parse(data []byte) (*Document, error) {
 }
 
 func (document *Document) Result(path string) ValidationResult {
-	return ValidationResult{Config: path, Version: 1, Valid: true, DeferredChecks: document.checks}
+	return ValidationResult{Config: path, Version: document.Version(), Valid: true, DeferredChecks: document.checks}
 }
 
 func (document *Document) Bytes() ([]byte, error) {

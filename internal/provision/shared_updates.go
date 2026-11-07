@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/zorveus/zorveus-cli/internal/api"
@@ -15,10 +14,10 @@ func serviceKeyActive(key api.ServiceKey, now time.Time) bool {
 	return key.Status == "active" && (key.ExpiresAt == nil || key.ExpiresAt.After(now))
 }
 
-func validateProviderConfig(provider string, raw json.RawMessage, index int) error {
+func validateProviderConfig(provider string, raw json.RawMessage, pointer string) error {
 	var config map[string]any
 	_ = json.Unmarshal(raw, &config)
-	return manifest.ValidateProviderConfig(provider, config, "/providerCredentials/"+strconv.Itoa(index)+"/providerConfig")
+	return manifest.ValidateProviderConfig(provider, config, pointer+"/providerConfig")
 }
 
 func (run *execution) updateServiceMetadata(step Step) error {

@@ -16,8 +16,8 @@ func addSharedResources(t *testing.T, config string) {
 	t.Helper()
 	t.Setenv("TEST_PROVIDER_KEY", "private-provider-input")
 	document := readDocument(t, config)
-	document.set("serviceKeys", []any{map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
-	document.set("providerCredentials", []any{map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
+	document.set("serviceKeys", map[string]any{"backend": map[string]any{"name": "Backend", "scopes": []string{"product_users:read"}}})
+	document.set("providerCredentials", map[string]any{"primary": map[string]string{"name": "Provider", "provider": "openai", "secretFromEnv": "TEST_PROVIDER_KEY"}})
 	writeDocument(t, config, document)
 }
 
@@ -38,8 +38,8 @@ func TestSharedMetadataUpdatesPreserveIDsAndSecrets(t *testing.T) {
 	desired.Providers[0].set("defaultModelPolicy", []string{"model_b", "model_a"})
 	desired.Providers[0].set("providerConfig", map[string]string{"api_base": "https://provider.example.test"})
 	document := readDocument(t, config)
-	document.set("serviceKeys", desired.ServiceKeys)
-	document.set("providerCredentials", desired.Providers)
+	document.set("serviceKeys", desired.resourceValue("serviceKeys", desired.ServiceKeys))
+	document.set("providerCredentials", desired.resourceValue("providerCredentials", desired.Providers))
 	writeDocument(t, config, document)
 	before := len(backend.writes)
 	planAndApply(t, service, config, path+".metadata")
@@ -62,8 +62,8 @@ func TestSharedMetadataUpdatesPreserveIDsAndSecrets(t *testing.T) {
 	desired.ServiceKeys[0].set("name", nil)
 	desired.Providers[0].set("providerConfig", nil)
 	document = readDocument(t, config)
-	document.set("serviceKeys", desired.ServiceKeys)
-	document.set("providerCredentials", desired.Providers)
+	document.set("serviceKeys", desired.resourceValue("serviceKeys", desired.ServiceKeys))
+	document.set("providerCredentials", desired.resourceValue("providerCredentials", desired.Providers))
 	writeDocument(t, config, document)
 	planAndApply(t, service, config, path+".clear")
 	if string(backend.services["service_1"]["key_alias"]) != "null" || string(backend.providers["provider_1"]["provider_config"]) != "null" {
@@ -82,7 +82,7 @@ func TestMetadataThenRotationCanResumeWithoutRepeatingEither(t *testing.T) {
 	desired, _, _, _ := loadManifest(config)
 	desired.Providers[0].set("name", "Updated provider")
 	document := readDocument(t, config)
-	document.set("providerCredentials", desired.Providers)
+	document.set("providerCredentials", desired.resourceValue("providerCredentials", desired.Providers))
 	writeDocument(t, config, document)
 	t.Setenv("TEST_PROVIDER_KEY", "private-replacement-input")
 	if _, err := service.Plan(context.Background(), "", config, path+".update"); err != nil {
@@ -113,7 +113,7 @@ func TestUnknownServiceRotationDoesNotRotateAgain(t *testing.T) {
 	var plan Plan
 	_, _, _ = loadJSON(path, &plan)
 	store := service.Secrets.(*memorySecrets)
-	store.failAccountPrefix = plan.ID + "/service:0"
+	store.failAccountPrefix = plan.ID + "/service:backend"
 	_, err := service.Apply(context.Background(), "", path, true, false)
 	if err == nil || problem.Safe(err).ExitCode != 5 {
 		t.Fatalf("expected creation delivery failure: %v", err)
@@ -156,7 +156,7 @@ func TestRejectedServiceRotationCanRetryAfterAccessIsRestored(t *testing.T) {
 	var plan Plan
 	_, _, _ = loadJSON(path, &plan)
 	store := service.Secrets.(*memorySecrets)
-	store.failAccountPrefix = plan.ID + "/service:0"
+	store.failAccountPrefix = plan.ID + "/service:backend"
 	_, _ = service.Apply(context.Background(), "", path, true, false)
 	store.failAccountPrefix = ""
 	backend.denyServiceRotation = true
@@ -191,8 +191,8 @@ func TestExpiredServiceKeyAndInvalidProviderConfigStopBeforeWrites(t *testing.T)
 				desired.Providers[0].set("providerConfig", nil)
 			}
 			document := readDocument(t, config)
-			document.set("serviceKeys", desired.ServiceKeys)
-			document.set("providerCredentials", desired.Providers)
+			document.set("serviceKeys", desired.resourceValue("serviceKeys", desired.ServiceKeys))
+			document.set("providerCredentials", desired.resourceValue("providerCredentials", desired.Providers))
 			writeDocument(t, config, document)
 			before := len(backend.writes)
 			_, err := service.Plan(context.Background(), "", config, path+".invalid")
@@ -214,7 +214,7 @@ func TestServiceNameNullIsOnlyAllowedForExistingKeys(t *testing.T) {
 			entry["id"] = id
 		}
 		document := readDocument(t, config)
-		document.set("serviceKeys", []any{entry})
+		document.set("serviceKeys", map[string]any{"backend": entry})
 		writeDocument(t, config, document)
 		_, err := service.Plan(context.Background(), "", config, path)
 		if id == "" && (err == nil || problem.Safe(err).ExitCode != 2) {

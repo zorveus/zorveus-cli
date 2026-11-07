@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/api"
@@ -90,12 +89,12 @@ func (service *Service) Status(ctx context.Context, origin, config string) (Stat
 	}
 	for index, router := range desired.Routers {
 		if router.text("id") != "" && app.ID == "" {
-			status := resourceStatus("router:"+strconv.Itoa(index), router.text("id"))
+			status := resourceStatus(desired.resourceRef("routingKeys", index), router.text("id"))
 			status.Status, status.Notes = "unchecked", []string{"The parent app could not be found."}
 			result.Resources = append(result.Resources, status)
 			continue
 		}
-		status, err := inspectRouter(remote, desired.App.text("id"), index, router, aliases)
+		status, err := inspectRouter(remote, desired.App.text("id"), desired.resourceRef("routingKeys", index), router, aliases)
 		if err != nil {
 			return StatusResult{}, err
 		}
@@ -107,14 +106,14 @@ func (service *Service) Status(ctx context.Context, origin, config string) (Stat
 	}
 	result.Resources = append(result.Resources, removed...)
 	for index, key := range desired.ServiceKeys {
-		status, err := inspectService(remote, index, key)
+		status, err := inspectService(remote, desired.resourceRef("serviceKeys", index), key)
 		if err != nil {
 			return StatusResult{}, err
 		}
 		result.Resources = append(result.Resources, status)
 	}
 	for index, credential := range desired.Providers {
-		status, err := inspectProvider(remote, index, credential)
+		status, err := inspectProvider(remote, desired.resourceRef("providerCredentials", index), credential)
 		if err != nil {
 			return StatusResult{}, err
 		}
@@ -247,8 +246,8 @@ func inspectKey(remote *gateway, app api.ManagedApp, desiredApp, desired Fields)
 	return status, nil
 }
 
-func inspectRouter(remote *gateway, appID string, index int, desired Fields, aliases map[string]string) (ResourceStatus, error) {
-	status := resourceStatus("router:"+strconv.Itoa(index), desired.text("id"))
+func inspectRouter(remote *gateway, appID, ref string, desired Fields, aliases map[string]string) (ResourceStatus, error) {
+	status := resourceStatus(ref, desired.text("id"))
 	if status.ID == "" {
 		return status, nil
 	}
@@ -278,8 +277,8 @@ func inspectRouter(remote *gateway, appID string, index int, desired Fields, ali
 	return status, nil
 }
 
-func inspectService(remote *gateway, index int, desired Fields) (ResourceStatus, error) {
-	status := resourceStatus("service:"+strconv.Itoa(index), desired.text("id"))
+func inspectService(remote *gateway, ref string, desired Fields) (ResourceStatus, error) {
+	status := resourceStatus(ref, desired.text("id"))
 	if status.ID == "" {
 		return status, nil
 	}
@@ -305,8 +304,8 @@ func inspectService(remote *gateway, index int, desired Fields) (ResourceStatus,
 	return status, nil
 }
 
-func inspectProvider(remote *gateway, index int, desired Fields) (ResourceStatus, error) {
-	status := resourceStatus("provider:"+strconv.Itoa(index), desired.text("id"))
+func inspectProvider(remote *gateway, ref string, desired Fields) (ResourceStatus, error) {
+	status := resourceStatus(ref, desired.text("id"))
 	if status.ID == "" {
 		return status, nil
 	}

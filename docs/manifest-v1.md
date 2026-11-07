@@ -10,19 +10,23 @@ The [JSON Schema](../internal/manifest/schema/v1.json) defines fields, types, fo
 
 IDs contain 1 to 128 ASCII letters, digits, underscores, or hyphens, starting with a letter or digit. They are opaque resource identifiers. Offline validation checks syntax and duplicates. Later planning must verify the resource kind, existence, app, and organization. App-owned IDs require an existing `app.id`.
 
-An omitted ID requests creation. An explicit null or empty ID is invalid. A new app requires `name` and `allowedModels`. A new key requires `name` and `routingAlias`. A new router requires `name` and at least one member. Existing resources can omit display names to preserve them. Display names never identify resources.
+An omitted ID requests creation. An explicit null or empty ID is invalid. A new app requires `name` and `allowedModels`. A new key requires `name`. A new router requires `name` and at least one member. Existing resources can omit display names to preserve them. Display names never identify resources.
+
+Each resource section is an object keyed by a stable local name, such as `keys.backend` or `routingKeys.public`. Names use 1 to 64 lowercase letters, digits, underscores, or hyphens. The object key identifies the configuration entry; `id` identifies the backend resource; `name` is its editable display name. Separate `alias` and `routingAlias` fields are not accepted.
+
+`plan --from dev.json --config prod.json` resolves source settings against target IDs by matching object keys. Planning leaves both files unchanged. Apply writes the resolved configuration and returned IDs into the target file. Source IDs are never copied. The target must contain an existing app ID. See the [cross-app planning guide](promotion.md).
 
 | Input | Intended update behavior |
 | --- | --- |
 | Omitted resource section | Preserve previously managed resources in that section |
-| Explicit resource array | Reconcile its entries with the previously managed set, preserving unrelated resources |
-| Explicit empty array | Propose removal of previously managed resources, subject to later destructive-operation and shared-resource policies |
+| Explicit resource object | Reconcile its entries with the previously managed set, preserving unrelated resources |
+| Explicit empty object | Propose removal of previously managed resources, subject to later destructive-operation and shared-resource policies |
 | Omitted optional field | Preserve the remote value, except key model inheritance |
 | Explicit null | Clear the field only where the schema permits null |
 
 Nullable fields are `app.creditUnitsPerUsd`, key `cap` and `productUserChargeMultiplier`, routing `defaultSelector`, consent `defaultCap`, `minimumCapAmount`, and `maximumCapAmount`, existing service-key `name`, and provider `providerConfig`.
 
-Null sections, null IDs, and null model lists are invalid. Clone preserves omitted fields, explicit nulls, and empty arrays as separate inputs.
+Null sections, null IDs, and null model lists are invalid. Clone preserves omitted fields, explicit nulls, and empty objects as separate inputs.
 
 ## Models and routing
 
@@ -30,9 +34,9 @@ Model lists are nonempty arrays of distinct, nonblank model identifiers. `init` 
 
 Keys inherit `app.allowedModels` when their own list is omitted. An explicit key list must be a subset of the app's list. App model `*` permits any key model. If an existing app's model list is omitted, validation defers model-policy checks to planning.
 
-Every declared key has a `routingAlias` consisting of 1 to 64 lowercase letters, digits, underscores, or hyphens. Aliases are unique among keys in the file and are managed by the CLI. The CLI resolves them to existing key IDs and sends selectors through the existing routing-membership API. They are not stored as a field on backend connections.
+The object key of each inference key is its routing selector. For example, `keys.backend` is selected as `backend`. These names stay in the manifest and CLI bookkeeping. The CLI resolves them to existing credential IDs and uses the existing routing-membership API.
 
-Router `members` is an array of distinct key aliases, with at most 100 entries. Members reference the declared `keys` section. With an existing `app.id` and an omitted `keys` section, unresolved aliases are deferred to planning. An explicit `keys` array requires references to resolve within that array.
+Router `members` remains an array of distinct inference-key names, with at most 100 entries. Members reference the declared `keys` object. With an existing `app.id` and an omitted `keys` section, unresolved names are deferred to planning. An explicit `keys` object, including `{}`, requires references to resolve within that object.
 
 An omitted `members` list preserves an existing router's membership. A new router requires at least one member. An existing router can set `members` to an empty array only with an explicit `defaultSelector: null`.
 
@@ -64,11 +68,11 @@ The schema lists supported providers and routing modes. Optional `secretKind` ma
 
 `secretFromEnv` contains an environment-variable name, never a literal secret. Offline commands check its syntax without reading the variable or requiring it to exist. Apply resolves required secret inputs before remote writes and keeps private input fingerprints in the OS credential store. Plans contain only the source variable name and secret kind. Status reports whether a declared input matches the remembered input and active version; unavailable inputs are reported as unverified.
 
-Clone rejects manifests with nonempty `serviceKeys` or `providerCredentials` arrays. Their reuse or replacement policy is not implemented. Empty shared-resource arrays remain empty.
+Clone rejects manifests with nonempty `serviceKeys` or `providerCredentials` objects. Their reuse or replacement policy is not implemented. Empty shared-resource objects remain empty.
 
 ## Validation output and limits
 
-`validate --json` returns `valid`, schema `version`, `config`, and `deferred_checks` inside the usual command result. A successful offline validation is not permission to apply a configuration remotely.
+`validate --json` returns `valid`, schema `version` of `1`, `config`, and `deferred_checks` inside the usual command result. A successful offline validation is not permission to apply a configuration remotely.
 
 Invalid manifests exit with code `2`. The JSON error contains `code`, `message`, and `pointer`. Pointers use JSON Pointer escaping. The empty pointer identifies the document root. Human-readable errors print the same location. Errors exclude manifest values and provider secrets.
 

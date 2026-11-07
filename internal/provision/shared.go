@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/api"
@@ -55,7 +54,7 @@ func (remote *gateway) provider(id string) (api.ProviderCredential, error) {
 
 func (plan *Plan) planShared(remote *gateway, desired Manifest) error {
 	for index, key := range desired.ServiceKeys {
-		ref, id := "service:"+strconv.Itoa(index), key.text("id")
+		ref, id := desired.resourceRef("serviceKeys", index), key.text("id")
 		plan.Bindings[ref] = id
 		payload := Fields{}
 		if key.has("name") {
@@ -80,15 +79,15 @@ func (plan *Plan) planShared(remote *gateway, desired Manifest) error {
 		plan.add("service_metadata", ref, id, fields(current), payload)
 	}
 	for index, credential := range desired.Providers {
-		if err := plan.planProvider(remote, index, credential); err != nil {
+		if err := plan.planProvider(remote, desired.resourceRef("providerCredentials", index), desired.resourcePointer("providerCredentials", index), credential); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (plan *Plan) planProvider(remote *gateway, index int, credential Fields) error {
-	ref, id := "provider:"+strconv.Itoa(index), credential.text("id")
+func (plan *Plan) planProvider(remote *gateway, ref, pointer string, credential Fields) error {
+	id := credential.text("id")
 	plan.Bindings[ref] = id
 	payload := providerMetadata(credential)
 	kind := providerSecretKind(credential)
@@ -110,10 +109,10 @@ func (plan *Plan) planProvider(remote *gateway, index int, credential Fields) er
 		return conflict()
 	}
 	if credential.has("provider") && credential.text("provider") != current.Provider {
-		return manifestError("immutable_provider", "A credential's provider is a creation-only setting. Declare a new resource to use another provider.", "/providerCredentials/"+strconv.Itoa(index)+"/provider")
+		return manifestError("immutable_provider", "A credential's provider is a creation-only setting. Declare a new resource to use another provider.", pointer+"/provider")
 	}
 	if credential.has("providerConfig") {
-		if err := validateProviderConfig(current.Provider, credential["providerConfig"], index); err != nil {
+		if err := validateProviderConfig(current.Provider, credential["providerConfig"], pointer); err != nil {
 			return err
 		}
 	}

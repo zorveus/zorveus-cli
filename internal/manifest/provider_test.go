@@ -17,7 +17,7 @@ func TestProviderConfigurationValidatesBeforeProvisioning(t *testing.T) {
 		{"kind_without_input", `{"id":"provider_a","secretKind":"api_key"}`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			data := `{"version":1,"app":{"id":"app_a"},"providerCredentials":[` + test.credential + `]}`
+			data := `{"version":1,"app":{"id":"app_a"},"providerCredentials":{"primary":` + test.credential + `}}`
 			_, err := Parse([]byte(data))
 			if (err == nil) != test.valid {
 				t.Fatalf("validation: %v", err)

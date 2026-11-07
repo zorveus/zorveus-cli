@@ -2,12 +2,13 @@
   "version": 1,
   "app": {
     "name": "OpenAI document processor",
-    "allowedModels": ["openai/gpt-4o-mini"]
+    "allowedModels": [
+      "openai/gpt-4o-mini"
+    ]
   },
-  "keys": [
-    {
+  "keys": {
+    "processor": {
       "name": "Processing backend",
-      "routingAlias": "processor",
       "creditMode": "enforce_if_present",
       "overrunPolicy": "limit_output",
       "cap": {
@@ -16,14 +17,16 @@
         "period": "monthly"
       }
     }
-  ],
-  "providerCredentials": [
-    {
+  },
+  "providerCredentials": {
+    "openai": {
       "name": "OpenAI primary",
       "provider": "openai",
       "secretFromEnv": "OPENAI_API_KEY",
       "routingMode": "auto_resolve",
-      "defaultModelPolicy": ["openai/gpt-4o-mini"]
+      "defaultModelPolicy": [
+        "openai/gpt-4o-mini"
+      ]
     }
-  ]
+  }
 }

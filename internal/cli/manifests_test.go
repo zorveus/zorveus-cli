@@ -36,11 +36,12 @@ func TestOfflineManifestWorkflowNeedsNoAuthenticationDependencies(t *testing.T) 
 		t.Fatal("clone did not save the replacement app name")
 	}
 	var created struct {
-		App struct {
+		Version int `json:"version"`
+		App     struct {
 			AllowedModels []string `json:"allowedModels"`
 		} `json:"app"`
 	}
-	if err := json.Unmarshal(data, &created); err != nil || len(created.App.AllowedModels) != 1 || created.App.AllowedModels[0] != "*" {
+	if err := json.Unmarshal(data, &created); err != nil || created.Version != 1 || len(created.App.AllowedModels) != 1 || created.App.AllowedModels[0] != "*" {
 		t.Fatal("init did not default to all models, or clone changed that default")
 	}
 }

@@ -7,10 +7,9 @@
       "<premium-model-id>"
     ]
   },
-  "keys": [
-    {
+  "keys": {
+    "free": {
       "name": "Free plan",
-      "routingAlias": "free",
       "allowedModels": [
         "<standard-model-id>"
       ],
@@ -21,9 +20,8 @@
         "period": "monthly"
       }
     },
-    {
+    "pro": {
       "name": "Pro plan",
-      "routingAlias": "pro",
       "creditMode": "enforce",
       "cap": {
         "amount": "10",
@@ -31,9 +29,9 @@
         "period": "monthly"
       }
     }
-  ],
-  "routingKeys": [
-    {
+  },
+  "routingKeys": {
+    "public": {
       "name": "Application backend",
       "members": [
         "free",
@@ -41,5 +39,5 @@
       ],
       "defaultSelector": null
     }
-  ]
+  }
 }
