@@ -83,7 +83,7 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 		if err := requireFinishedApply(plan.Config); err != nil {
 			return ApplyResult{}, err
 		}
-		fresh, err := service.buildFrom(ctx, plan.Target.Origin, plan.Config, plan.Source)
+		fresh, err := service.buildFrom(ctx, plan.Target.Origin, plan.Config, plan.Source, plan.KeepNames)
 		if err != nil {
 			return ApplyResult{}, err
 		}
@@ -142,7 +142,7 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 }
 
 func samePlan(left, right Plan) bool {
-	if left.Source != right.Source || left.SourceDigest != right.SourceDigest {
+	if left.Source != right.Source || left.SourceDigest != right.SourceDigest || left.KeepNames != right.KeepNames {
 		return false
 	}
 	var leftManifest, rightManifest Fields

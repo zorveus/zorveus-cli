@@ -15,7 +15,7 @@ func TestPromotionRemovalsStillRequireExplicitApplyApproval(t *testing.T) {
 	planAndApply(t, service, target, planPath)
 	source := filepath.Join(filepath.Dir(target), "dev.json")
 	writeDocument(t, source, fields(map[string]any{"version": 1, "app": map[string]string{"id": "app_dev"}, "keys": map[string]any{}, "routingKeys": map[string]any{}}))
-	if _, err := Promote(context.Background(), source, target); err != nil {
+	if _, err := Promote(context.Background(), source, target, true); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := service.Plan(context.Background(), "", target, planPath)
@@ -48,7 +48,7 @@ func TestPromotedSharedSettingsKeepProductionCredentials(t *testing.T) {
 		"serviceKeys":         map[string]any{"billing": map[string]any{"id": "dev_service", "name": "Updated billing", "scopes": []string{"product_users:read", "product_users:write"}}},
 		"providerCredentials": map[string]any{"openai": map[string]any{"id": "dev_provider", "name": "Updated OpenAI", "routingMode": "manual_grant_only"}},
 	}))
-	if _, err := Promote(context.Background(), source, target); err != nil {
+	if _, err := Promote(context.Background(), source, target, true); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := service.Plan(context.Background(), "", target, planPath)
@@ -70,8 +70,8 @@ func TestPromotedSharedSettingsKeepProductionCredentials(t *testing.T) {
 	if desired.ServiceKeys[0].text("id") != "service_1" || desired.Providers[0].text("id") != "provider_1" || backend.providerVersions != 1 || backend.serviceRotations != 0 {
 		t.Fatal("promotion changed the target's credential identity or secret")
 	}
-	if backend.services["service_1"].text("key_alias") != "Updated billing" || backend.providers["provider_1"].text("credential_name") != "Updated OpenAI" {
-		t.Fatal("shared metadata updates did not reach production")
+	if backend.services["service_1"].text("key_alias") != "Old billing" || backend.providers["provider_1"].text("credential_name") != "Old OpenAI" {
+		t.Fatal("promotion changed shared credential display names")
 	}
 	if backend.services["service_1"].has("alias") || backend.providers["provider_1"].has("alias") {
 		t.Fatal("local aliases reached the backend")
@@ -138,7 +138,7 @@ func TestRejectedPromotionPreservesFilesAndPendingApplyState(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			_, err := Promote(context.Background(), source, target)
+			_, err := Promote(context.Background(), source, target, true)
 			if err == nil || problem.Safe(err).Code != test.code {
 				t.Fatalf("expected %s, got %v", test.code, err)
 			}
@@ -157,13 +157,13 @@ func TestPromotionRejectsSameFileAndSymbolicLinks(t *testing.T) {
 	if err := os.WriteFile(config, []byte(`{"version":1,"app":{"id":"app_a"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Promote(context.Background(), config, config); err == nil || problem.Safe(err).Code != "promotion_same_file" {
+	if _, err := Promote(context.Background(), config, config, true); err == nil || problem.Safe(err).Code != "promotion_same_file" {
 		t.Fatal("promotion accepted the same file twice")
 	}
 	if err := os.Symlink(config, link); err != nil {
 		t.Skip("symbolic links are unavailable:", err)
 	}
-	if _, err := Promote(context.Background(), config, link); err == nil || problem.Safe(err).Code != "promotion_files_required" {
+	if _, err := Promote(context.Background(), config, link, true); err == nil || problem.Safe(err).Code != "promotion_files_required" {
 		t.Fatal("promotion accepted a symbolic-link target")
 	}
 }

@@ -62,13 +62,13 @@ Keep the development and production manifests returned by apply. Resource object
 
 ```sh
 zorveus login
-zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json --keep-names
 zorveus apply --plan zorveus.prod.plan.json --yes
 ```
 
-Select the production organization during login. Plan leaves both files unchanged. Apply updates the production JSON with source settings and production IDs. New entries receive new production IDs; later plans keep them.
+Select the production organization during login. Plan leaves both files unchanged. Apply updates the production JSON with source policies and settings while keeping existing production IDs and display names. New entries receive new production IDs; later plans keep them.
 
-`keys.backend` matches `keys.backend`, and `routingKeys.primary` matches `routingKeys.primary`. Keep those object names stable across environments. Display names may differ. Removing a managed key or router from an explicit object can propose revocation, requiring `--allow-delete` during apply.
+`keys.backend` matches `keys.backend`, and `routingKeys.primary` matches `routingKeys.primary`. Keep those object names stable across environments. The `--keep-names` flag preserves existing production display names. Omit it to copy source names too. With the flag, new entries use the source name unless their target entry already has a name. Removing a managed key or router from an explicit object can propose revocation, requiring `--allow-delete` during apply.
 
 See the [cross-app planning guide](../docs/promotion.md) for complete examples and credential rules.
 

@@ -17,7 +17,7 @@ type PromotionResult struct {
 }
 
 // Promote changes only the target manifest. Plan and apply still own deployment.
-func Promote(ctx context.Context, source, target string) (PromotionResult, error) {
+func Promote(ctx context.Context, source, target string, keepNames bool) (PromotionResult, error) {
 	source, err := filepath.Abs(source)
 	if err != nil {
 		return PromotionResult{}, storageError()
@@ -54,7 +54,7 @@ func Promote(ctx context.Context, source, target string) (PromotionResult, error
 	if err != nil {
 		return PromotionResult{}, err
 	}
-	promoted, err := manifest.Promote(sourceDocument, targetDocument)
+	promoted, err := manifest.Promote(sourceDocument, targetDocument, keepNames)
 	if err != nil {
 		return PromotionResult{}, err
 	}

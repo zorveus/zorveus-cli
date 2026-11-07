@@ -14,7 +14,7 @@ An omitted ID requests creation. An explicit null or empty ID is invalid. A new 
 
 Each resource section is an object keyed by a stable local name, such as `keys.backend` or `routingKeys.public`. Names use 1 to 64 lowercase letters, digits, underscores, or hyphens. The object key identifies the configuration entry; `id` identifies the backend resource; `name` is its editable display name. Separate `alias` and `routingAlias` fields are not accepted.
 
-`plan --from dev.json --config prod.json` resolves source settings against target IDs by matching object keys. Planning leaves both files unchanged. Apply writes the resolved configuration and returned IDs into the target file. Source IDs are never copied. The target must contain an existing app ID. See the [cross-app planning guide](promotion.md).
+`plan --from dev.json --config prod.json` resolves source settings against target IDs by matching object keys. Planning leaves both files unchanged. Apply writes the resolved configuration and returned IDs into the target file. Source IDs are never copied. Supplied source names copy by default. Add `--keep-names` to preserve target display names; new entries then use source names only when no target name is configured. The saved plan records this choice. The target must contain an existing app ID. See the [cross-app planning guide](promotion.md).
 
 | Input | Intended update behavior |
 | --- | --- |

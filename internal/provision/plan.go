@@ -13,10 +13,10 @@ import (
 )
 
 func (service *Service) Plan(ctx context.Context, origin, config, output string) (PlanResult, error) {
-	return service.PlanFrom(ctx, origin, config, output, "")
+	return service.PlanFrom(ctx, origin, config, output, "", false)
 }
 
-func (service *Service) PlanFrom(ctx context.Context, origin, config, output, source string) (PlanResult, error) {
+func (service *Service) PlanFrom(ctx context.Context, origin, config, output, source string, keepNames bool) (PlanResult, error) {
 	config, err := filepath.Abs(config)
 	if err != nil {
 		return PlanResult{}, storageError()
@@ -29,7 +29,7 @@ func (service *Service) PlanFrom(ctx context.Context, origin, config, output, so
 	if err := requireFinishedApply(config); err != nil {
 		return PlanResult{}, err
 	}
-	plan, err := service.buildFrom(ctx, origin, config, source)
+	plan, err := service.buildFrom(ctx, origin, config, source, keepNames)
 	if err != nil {
 		return PlanResult{}, err
 	}
@@ -71,10 +71,13 @@ func savePlan(path string, plan Plan) error {
 }
 
 func (service *Service) build(ctx context.Context, origin, config string) (Plan, error) {
-	return service.buildFrom(ctx, origin, config, "")
+	return service.buildFrom(ctx, origin, config, "", false)
 }
 
-func (service *Service) buildFrom(ctx context.Context, origin, config, source string) (Plan, error) {
+func (service *Service) buildFrom(ctx context.Context, origin, config, source string, keepNames bool) (Plan, error) {
+	if keepNames && source == "" {
+		return Plan{}, problem.New("invalid_arguments", "Use --keep-names with --from to preserve target display names.", 2)
+	}
 	desired, original, canonical, err := loadManifest(config)
 	if err != nil {
 		return Plan{}, err
@@ -100,7 +103,7 @@ func (service *Service) buildFrom(ctx context.Context, origin, config, source st
 		if err != nil {
 			return Plan{}, err
 		}
-		canonical, err = manifest.Promote(sourceDocument, targetDocument)
+		canonical, err = manifest.Promote(sourceDocument, targetDocument, keepNames)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -118,7 +121,7 @@ func (service *Service) buildFrom(ctx context.Context, origin, config, source st
 		return Plan{}, err
 	}
 	plan := Plan{Version: 1, ID: newID(), Target: remote.target, Config: config, ConfigDigest: digest(original), StateDigest: digest(stateBytes), Manifest: canonical, Steps: []Step{}, Bindings: map[string]string{}}
-	plan.Source, plan.SourceDigest = source, sourceDigest
+	plan.Source, plan.SourceDigest, plan.KeepNames = source, sourceDigest, keepNames
 	models, err := plan.planApp(remote, desired.App)
 	if err != nil {
 		return Plan{}, err

@@ -13,31 +13,44 @@ import (
 )
 
 func TestPromotionCommandWorksOfflineAndReturnsOneJSONResult(t *testing.T) {
-	dir := t.TempDir()
-	source, target := filepath.Join(dir, "dev.json"), filepath.Join(dir, "prod.json")
-	if err := os.WriteFile(source, []byte(`{"version":1,"app":{"id":"app_dev","name":"Updated"}}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(target, []byte(`{"version":1,"app":{"id":"app_prod","name":"Old"}}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	for _, changed := range []bool{true, false} {
-		var stdout, stderr bytes.Buffer
-		arguments := []string{"promote", "--from", source, "--to", target, "--json", "--non-interactive"}
-		if code := Execute(context.Background(), arguments, &stdout, &stderr, Dependencies{}); code != 0 {
-			t.Fatalf("offline promotion failed: %d %s %s", code, stdout.String(), stderr.String())
-		}
-		var result struct {
-			OK     bool                      `json:"ok"`
-			Result provision.PromotionResult `json:"result"`
-		}
-		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || !result.OK || result.Result.Changed != changed || result.Result.Config != target || stderr.Len() != 0 {
-			t.Fatalf("expected one successful promotion result: %s %s", stdout.String(), stderr.String())
-		}
-	}
-	data, err := os.ReadFile(target)
-	if err != nil || !bytes.Contains(data, []byte("app_prod")) || !bytes.Contains(data, []byte("Updated")) || bytes.Contains(data, []byte("app_dev")) {
-		t.Fatal("promotion did not preserve target identity and copy source settings")
+	for _, test := range []struct {
+		name      string
+		keepNames bool
+	}{
+		{"Updated", false},
+		{"Old", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source, target := filepath.Join(dir, "dev.json"), filepath.Join(dir, "prod.json")
+			if err := os.WriteFile(source, []byte(`{"version":1,"app":{"id":"app_dev","name":"Updated","creditUnitsPerUsd":"1000"}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, []byte(`{"version":1,"app":{"id":"app_prod","name":"Old"}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, changed := range []bool{true, false} {
+				var stdout, stderr bytes.Buffer
+				arguments := []string{"promote", "--from", source, "--to", target, "--json", "--non-interactive"}
+				if test.keepNames {
+					arguments = append(arguments, "--keep-names")
+				}
+				if code := Execute(context.Background(), arguments, &stdout, &stderr, Dependencies{}); code != 0 {
+					t.Fatalf("offline promotion failed: %d %s %s", code, stdout.String(), stderr.String())
+				}
+				var result struct {
+					OK     bool                      `json:"ok"`
+					Result provision.PromotionResult `json:"result"`
+				}
+				if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || !result.OK || result.Result.Changed != changed || result.Result.Config != target || stderr.Len() != 0 {
+					t.Fatalf("expected one successful promotion result: %s %s", stdout.String(), stderr.String())
+				}
+			}
+			data, err := os.ReadFile(target)
+			if err != nil || !bytes.Contains(data, []byte("app_prod")) || !bytes.Contains(data, []byte(test.name)) || !bytes.Contains(data, []byte("1000")) || bytes.Contains(data, []byte("app_dev")) {
+				t.Fatal("promotion did not preserve target ID or honor the requested name behavior")
+			}
+		})
 	}
 }
 

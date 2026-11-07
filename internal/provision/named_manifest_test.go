@@ -129,9 +129,9 @@ func TestNamedPlanFromPreservesFilesUntilApplyAndKeepsTargetIDs(t *testing.T) {
 	targetBefore, _ := os.ReadFile(target)
 	sourceBefore, _ := os.ReadFile(source)
 	writesBefore := len(backend.writes)
-	plan, err := service.PlanFrom(context.Background(), "", target, planPath, source)
+	plan, err := service.PlanFrom(context.Background(), "", target, planPath, source, false)
 	if err != nil || plan.Operations != 4 {
-		t.Fatalf("expected app update, cap update, worker creation and router update: %+v %v", plan.Changes, err)
+		t.Fatalf("expected app rename, cap update, worker creation and router update: %+v %v", plan.Changes, err)
 	}
 	targetAfterPlan, _ := os.ReadFile(target)
 	if !bytes.Equal(targetBefore, targetAfterPlan) || len(backend.writes) != writesBefore {
@@ -148,15 +148,98 @@ func TestNamedPlanFromPreservesFilesUntilApplyAndKeepsTargetIDs(t *testing.T) {
 		t.Fatal("plan --from lost target identities")
 	}
 	if desired.App.text("name") != "Updated" || backend.caps["conn_1"].text("amount") != "200" {
-		t.Fatal("source settings were not applied")
+		t.Fatal("source name or cap was not applied")
 	}
 	sourceAfter, _ := os.ReadFile(source)
 	if !bytes.Equal(sourceBefore, sourceAfter) {
 		t.Fatal("apply changed the source file")
 	}
-	plan, err = service.PlanFrom(context.Background(), "", target, planPath, source)
+	plan, err = service.PlanFrom(context.Background(), "", target, planPath, source, false)
 	if err != nil || plan.Operations != 0 {
 		t.Fatalf("repeated cross-manifest plan did not converge: %+v %v", plan.Changes, err)
+	}
+}
+
+func TestCrossAppPlanningKeepsNamesOnlyWhenRequested(t *testing.T) {
+	service, backend, _, target, planPath := setup(t)
+	writeDocument(t, target, fields(map[string]any{
+		"version": 1,
+		"app":     map[string]any{"name": "Subscription assistant prod", "allowedModels": []string{"*"}},
+		"keys": map[string]any{
+			"free": map[string]string{"name": "Free plan prod"},
+			"pro":  map[string]string{"name": "Pro plan prod"},
+		},
+		"routingKeys": map[string]any{
+			"primary": map[string]any{"name": "Subscription backend prod", "members": []string{"free", "pro"}, "defaultSelector": nil},
+		},
+	}))
+	planAndApply(t, service, target, planPath)
+	source := filepath.Join(filepath.Dir(target), "dev.json")
+	document := readDocument(t, target)
+	document.set("app", map[string]any{"id": "app_dev", "name": "Subscription assistant dev", "allowedModels": []string{"*"}})
+	document.set("keys", map[string]any{
+		"free": map[string]string{"id": "dev_free", "name": "Free plan"},
+		"pro":  map[string]string{"id": "dev_pro", "name": "Pro plan"},
+	})
+	document.set("routingKeys", map[string]any{
+		"primary": map[string]any{"id": "dev_router", "name": "Subscription backend", "members": []string{"free", "pro"}, "defaultSelector": nil},
+	})
+	writeDocument(t, source, document)
+	targetBefore, _ := os.ReadFile(target)
+	sourceBefore, _ := os.ReadFile(source)
+	writesBefore := len(backend.writes)
+	plan, err := service.PlanFrom(context.Background(), "", target, planPath, source, true)
+	if err != nil || plan.Operations != 0 {
+		t.Fatalf("environment display names produced changes: %+v %v", plan.Changes, err)
+	}
+	if _, err := service.Apply(context.Background(), "", planPath, true, false); err != nil {
+		t.Fatal(err)
+	}
+	targetAfter, _ := os.ReadFile(target)
+	sourceAfter, _ := os.ReadFile(source)
+	if !bytes.Equal(targetBefore, targetAfter) || !bytes.Equal(sourceBefore, sourceAfter) || len(backend.writes) != writesBefore {
+		t.Fatal("a name-only cross-app plan changed files or remote resources")
+	}
+	// Editing the target explicitly still requests a normal display-name update.
+	document = readDocument(t, target)
+	var app Fields
+	if err := json.Unmarshal(document["app"], &app); err != nil {
+		t.Fatal(err)
+	}
+	app.set("name", "Subscription assistant production")
+	document.set("app", app)
+	writeDocument(t, target, document)
+	plan, err = service.Plan(context.Background(), "", target, planPath)
+	if err != nil || plan.Operations != 1 || plan.Changes[0].Kind != "app_profile" {
+		t.Fatalf("direct target rename did not produce a name update: %+v %v", plan.Changes, err)
+	}
+	if _, err := service.Apply(context.Background(), "", planPath, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if backend.app.text("app_name") != "Subscription assistant production" {
+		t.Fatal("direct target rename was not applied")
+	}
+	// Without --keep-names, all supplied source names request updates.
+	plan, err = service.PlanFrom(context.Background(), "", target, planPath, source, false)
+	if err != nil || plan.Operations != 4 {
+		t.Fatalf("expected four source name updates: %+v %v", plan.Changes, err)
+	}
+	if _, err := service.Apply(context.Background(), "", planPath, true, false); err != nil {
+		t.Fatal(err)
+	}
+	desired, _, _, err := loadManifest(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desired.App.text("name") != "Subscription assistant dev" || desired.Keys[0].text("name") != "Free plan" || desired.Keys[1].text("name") != "Pro plan" || desired.Routers[0].text("name") != "Subscription backend" {
+		t.Fatal("default cross-app apply did not copy source display names")
+	}
+	if desired.App.text("id") != "app_a" || desired.Keys[0].text("id") != "conn_1" || desired.Keys[1].text("id") != "conn_2" || desired.Routers[0].text("id") != "router_1" {
+		t.Fatal("renaming resources changed production IDs")
+	}
+	plan, err = service.PlanFrom(context.Background(), "", target, planPath, source, false)
+	if err != nil || plan.Operations != 0 {
+		t.Fatalf("source name updates did not converge: %+v %v", plan.Changes, err)
 	}
 }
 
@@ -168,7 +251,7 @@ func TestNamedPlanFromRejectsChangedSourceBeforeWrites(t *testing.T) {
 	planAndApply(t, service, target, planPath)
 	source := filepath.Join(filepath.Dir(target), "dev.json")
 	writeDocument(t, source, fields(map[string]any{"version": 1, "app": map[string]string{"id": "app_dev", "name": "Updated"}}))
-	if _, err := service.PlanFrom(context.Background(), "", target, planPath, source); err != nil {
+	if _, err := service.PlanFrom(context.Background(), "", target, planPath, source, true); err != nil {
 		t.Fatal(err)
 	}
 	document := readDocument(t, source)
@@ -198,7 +281,7 @@ func TestNamedPlanFromResumesSavedConfigurationAfterSecretSaveFailure(t *testing
 	keys["worker"] = fields(map[string]string{"id": "dev_worker", "name": "Worker"})
 	document.set("keys", keys)
 	writeDocument(t, source, document)
-	if _, err := service.PlanFrom(context.Background(), "", target, planPath, source); err != nil {
+	if _, err := service.PlanFrom(context.Background(), "", target, planPath, source, true); err != nil {
 		t.Fatal(err)
 	}
 	store := service.Secrets.(*memorySecrets)
@@ -239,7 +322,7 @@ func TestNamedPlanFromDistinguishesOmittedAndEmptyObjects(t *testing.T) {
 			document.set("routingKeys", map[string]Fields{})
 		}
 		writeDocument(t, source, document)
-		plan, err := service.PlanFrom(context.Background(), "", target, planPath, source)
+		plan, err := service.PlanFrom(context.Background(), "", target, planPath, source, true)
 		if err != nil {
 			t.Fatal(err)
 		}

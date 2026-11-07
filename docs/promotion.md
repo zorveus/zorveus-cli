@@ -1,6 +1,6 @@
 # Plan configuration between apps
 
-Use the development JSON as the desired configuration and the production JSON as the source of production IDs. Both files use version 1 resource objects. Planning leaves both files unchanged; apply updates only the production file.
+Use the development JSON as the desired configuration and match resources against the production JSON to retain production IDs. Add `--keep-names` to preserve production display names too. Both files use version 1 resource objects. Planning leaves both files unchanged; apply updates only the production file.
 
 ## Prepare the target once
 
@@ -36,7 +36,7 @@ These IDs illustrate existing resources. Use your actual app IDs when trying the
   "version": 1,
   "app": {
     "id": "app_development",
-    "name": "Assistant",
+    "name": "Assistant dev",
     "allowedModels": [
       "*"
     ]
@@ -44,7 +44,7 @@ These IDs illustrate existing resources. Use your actual app IDs when trying the
   "keys": {
     "backend": {
       "id": "connection_dev_backend",
-      "name": "Backend",
+      "name": "Backend dev",
       "cap": {
         "amount": "200",
         "currency": "USD",
@@ -59,7 +59,7 @@ These IDs illustrate existing resources. Use your actual app IDs when trying the
   "routingKeys": {
     "primary": {
       "id": "router_development",
-      "name": "Assistant router",
+      "name": "Assistant router dev",
       "members": [
         "backend",
         "worker"
@@ -79,7 +79,7 @@ Production currently has only the backend key, with a smaller cap:
   "version": 1,
   "app": {
     "id": "app_production",
-    "name": "Assistant",
+    "name": "Assistant prod",
     "allowedModels": [
       "*"
     ]
@@ -87,7 +87,7 @@ Production currently has only the backend key, with a smaller cap:
   "keys": {
     "backend": {
       "id": "connection_prod_backend",
-      "name": "Backend",
+      "name": "Backend prod",
       "cap": {
         "amount": "100",
         "currency": "USD",
@@ -98,7 +98,7 @@ Production currently has only the backend key, with a smaller cap:
   "routingKeys": {
     "primary": {
       "id": "router_production",
-      "name": "Assistant router",
+      "name": "Assistant router prod",
       "members": [
         "backend"
       ],
@@ -112,12 +112,12 @@ Production currently has only the backend key, with a smaller cap:
 
 ```sh
 zorveus login
-zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json --keep-names
 ```
 
 Choose the production organization during login. Plan reads production through your saved management login. The source file supplies settings; its IDs never replace production IDs.
 
-For these files, expect one key creation, one cap update, and one router membership update:
+With `--keep-names`, expect one key creation, one cap update, and one router membership update:
 
 - The app retains `app_production`.
 - `keys.backend` retains `connection_prod_backend`, with a monthly USD 200 cap.
@@ -139,13 +139,27 @@ Changing either file before starting apply requires a fresh plan. Once an apply 
 
 ## Fields and removals
 
-Supplied settings come from the source, including names and callback URLs. Omitted optional fields preserve target values. OAuth and consent objects allow partial updates; `providerConfig` replaces its whole object. Explicit `null` clears nullable fields. An omitted key model list means inheritance from the resolved target app's model list.
+Supplied settings come from the source, including display names and callback URLs. Target IDs always stay in place. Choose whether names copy when you create the plan:
+
+```sh
+# Include the source display names.
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+
+# Preserve the target display names.
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json --keep-names
+```
+
+Without the flag, the example also proposes renaming the production app to `Assistant dev`, its backend key to `Backend dev`, and its router to `Assistant router dev`. Their production IDs stay unchanged.
+
+With `--keep-names`, an existing target's omitted name stays omitted, preserving its backend name. An explicit null service-key name also remains null. New entries use the source name unless their target entry already supplies a name. The saved plan records the flag, so apply uses the choice you reviewed.
+
+Omitted optional fields preserve target values. OAuth and consent objects allow partial updates; `providerConfig` replaces its whole object. Explicit `null` clears nullable fields. An omitted key model list means inheritance from the resolved target app's model list.
 
 An omitted resource section preserves the target section. An explicit object supplies the desired entries for that section. An unmatched source entry becomes a new resource without the source ID. An explicit empty object clears the target section.
 
 Removing previously managed inference keys or routers can produce revocations. Those plans require `--allow-delete` during apply. Unrelated resources outside the managed set retain the normal plan behavior. Removing service-key or provider entries does not revoke those shared organization resources.
 
-Object names should stay stable across environments. Renaming a display name preserves the match. Changing an object name in only the source creates an unmatched entry and can propose creating a replacement and revoking the previous managed entry.
+Object names should stay stable across environments. Renaming a display name in the target file preserves the match. Run a normal plan against that target to review and apply the rename. Changing an object name in only the source creates an unmatched entry and can propose creating a replacement and revoking the previous managed entry.
 
 ## Shared credentials
 
@@ -160,7 +174,7 @@ The existing backend restrictions remain in force. For example, changing an exis
 For an offline file update before a separate plan:
 
 ```sh
-zorveus promote --from zorveus.dev.json --to zorveus.prod.json
+zorveus promote --from zorveus.dev.json --to zorveus.prod.json --keep-names
 ```
 
-This command updates the target JSON immediately, retaining its IDs. It validates the merged result and leaves the source unchanged. Use `plan --from` when you want the target JSON preserved until apply.
+This command updates the target JSON immediately, retaining its IDs. `--keep-names` also preserves existing target display names; omit the flag to copy source names. It validates the merged result and leaves the source unchanged. Use `plan --from` when you want the target JSON preserved until apply.

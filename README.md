@@ -271,15 +271,27 @@ Keep separate dev and prod manifests. Both use the same resource object names, a
 
 ```sh
 zorveus login
-zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json --keep-names
 zorveus apply --plan zorveus.prod.plan.json --yes
 ```
 
-Choose the production organization during login. The source supplies the configuration; matching entries retain their production IDs. For example, `keys.backend` matches `keys.backend`, regardless of display names or JSON property order. New entries receive production IDs during apply.
+Choose the production organization during login. The source supplies policies and settings; matching entries retain their production IDs. `--keep-names` also preserves their production display names. For example, `keys.backend` matches `keys.backend`, regardless of display names or JSON property order. New entries receive production IDs during apply.
 
 Plan leaves both files unchanged. Apply writes the resolved settings and IDs into the production manifest. The source file stays unchanged. Editing either file after planning requires a fresh plan before starting apply.
 
-Supplied names, callbacks, caps, model lists, and credential settings come from the source. Omitted optional fields preserve target values, except key model inheritance. An omitted resource section preserves that section. An explicit object supplies its desired entries, so removing a managed inference key or router can propose revocation. Review those changes and pass `--allow-delete` during apply when appropriate.
+Names copy from the source by default. Use `--keep-names` when production needs its own dashboard labels:
+
+```sh
+# Copy supplied settings, including display names. Keep production IDs.
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json
+
+# Copy supplied settings while keeping production display names and IDs.
+zorveus plan --from zorveus.dev.json --config zorveus.prod.json --keep-names
+```
+
+With `--keep-names`, new entries use the source name unless their target entry already supplies a name. To rename just a production resource, edit its `name` in the production file and run `zorveus plan --config zorveus.prod.json`. Callback URLs, caps, model lists, and credential settings still come from the source in both modes. The saved plan records your name choice; apply needs no extra flag.
+
+Omitted optional fields preserve target values, except key model inheritance. An omitted resource section preserves that section. An explicit object supplies its desired entries, so removing a managed inference key or router can propose revocation. Review those changes and pass `--allow-delete` during apply when appropriate.
 
 See the [cross-app planning guide](docs/promotion.md) for complete before-and-after JSON. Use `promote --from dev.json --to prod.json` only when you want to update the target JSON locally before planning.
 

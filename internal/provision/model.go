@@ -118,6 +118,7 @@ type Plan struct {
 	Manifest     json.RawMessage   `json:"manifest"`
 	Source       string            `json:"source_config,omitempty"`
 	SourceDigest string            `json:"source_config_digest,omitempty"`
+	KeepNames    bool              `json:"keep_names,omitempty"`
 	Steps        []Step            `json:"steps"`
 	Scopes       []string          `json:"required_scopes"`
 	Bindings     map[string]string `json:"bindings"`

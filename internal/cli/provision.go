@@ -13,6 +13,7 @@ import (
 
 func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *cobra.Command {
 	var config, output, source string
+	var keepNames bool
 	command := &cobra.Command{
 		Use:   "plan",
 		Short: "Read remote resources and save proposed manifest changes",
@@ -22,7 +23,7 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 				output = strings.TrimSuffix(config, filepath.Ext(config)) + ".plan.json"
 			}
 			service := provision.Service{Auth: dependencies.Auth, Secrets: dependencies.Secrets}
-			result, err := service.PlanFrom(command.Context(), settings.apiOrigin, config, output, source)
+			result, err := service.PlanFrom(command.Context(), settings.apiOrigin, config, output, source, keepNames)
 			if err != nil {
 				return err
 			}
@@ -35,7 +36,8 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 		},
 	}
 	command.Flags().StringVar(&config, "config", "zorveus.json", "Manifest to compare")
-	command.Flags().StringVar(&source, "from", "", "Use settings from this manifest while retaining the target manifest's IDs")
+	command.Flags().StringVar(&source, "from", "", "Use settings from this manifest, preserving existing target IDs")
+	command.Flags().BoolVar(&keepNames, "keep-names", false, "With --from, preserve target display names instead of copying source names")
 	command.Flags().StringVar(&output, "out", "", "Saved plan path; defaults to <manifest-name>.plan.json beside the manifest")
 	_ = command.MarkFlagFilename("config", "json")
 	_ = command.MarkFlagFilename("from", "json")

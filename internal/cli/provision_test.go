@@ -129,12 +129,12 @@ func TestImportStatusAndPlanFromUseOnlyReadsAndReturnOneJSONResult(t *testing.T)
 	}
 	targetBefore, _ := os.ReadFile(config)
 	source := filepath.Join(filepath.Dir(config), "dev.json")
-	sourceBefore := []byte(`{"version":1,"app":{"id":"app_dev","name":"Updated"}}`)
+	sourceBefore := []byte(`{"version":1,"app":{"id":"app_dev","name":"Updated","allowedModels":["model_a"]}}`)
 	if err := os.WriteFile(source, sourceBefore, 0600); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	arguments := []string{"plan", "--from", source, "--config", config, "--json"}
+	arguments := []string{"plan", "--from", source, "--config", config, "--keep-names", "--json"}
 	code := Execute(context.Background(), arguments, &stdout, &stderr, dependencies)
 	var result struct {
 		OK     bool                 `json:"ok"`
@@ -147,5 +147,26 @@ func TestImportStatusAndPlanFromUseOnlyReadsAndReturnOneJSONResult(t *testing.T)
 	sourceAfter, _ := os.ReadFile(source)
 	if !bytes.Equal(targetBefore, targetAfter) || !bytes.Equal(sourceBefore, sourceAfter) {
 		t.Fatal("plan --from changed an input manifest")
+	}
+	var saved provision.Plan
+	planBytes, err := os.ReadFile(result.Result.Plan)
+	if err != nil || json.Unmarshal(planBytes, &saved) != nil || !saved.KeepNames {
+		t.Fatal("saved plan did not record --keep-names")
+	}
+	stdout.Reset()
+	stderr.Reset()
+	arguments = []string{"plan", "--from", source, "--config", config, "--json"}
+	code = Execute(context.Background(), arguments, &stdout, &stderr, dependencies)
+	if code != 0 || json.Unmarshal(stdout.Bytes(), &result) != nil || result.Result.Operations != 2 {
+		t.Fatalf("default plan did not include the source name update: %s %s", stdout.String(), stderr.String())
+	}
+}
+
+func TestPlanKeepNamesRequiresSource(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), []string{"plan", "--keep-names", "--json"}, &stdout, &stderr, Dependencies{})
+	if code != 2 || !strings.Contains(stdout.String(), "invalid_arguments") || !strings.Contains(stdout.String(), "--from") {
+		t.Fatalf("expected an explanation before reading files or using auth: %s %s", stdout.String(), stderr.String())
 	}
 }
