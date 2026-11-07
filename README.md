@@ -4,6 +4,8 @@ Manage your Zorveus apps, inference keys, routing keys, spending limits, and pro
 
 Describe an app in `zorveus.json`, review the proposed changes, and apply them to your organization. You can also import an existing app, check for configuration drift, or prepare a separate development copy.
 
+To use these workflows from a coding agent, connect the CLI's [local MCP server](docs/mcp.md).
+
 ## Install
 
 You do not need Go or a source checkout to run the CLI.
@@ -81,6 +83,18 @@ Follow this path to create an app and learn the main workflow:
 6. [Import an existing app](#import-an-existing-app). Use the app ID from your manifest and choose a new destination file.
 
 After that, try [BYOK](#bring-your-own-provider-key) and [service keys](#manage-service-keys), using the permissions included in the default login. A configured spending cap sets a limit; it does not purchase credits or send an inference request.
+
+## Connect a coding agent
+
+Sign in with `zorveus login`, then configure your MCP client to launch:
+
+```sh
+zorveus mcp serve --directory /absolute/path/to/your/project
+```
+
+The local stdio server exposes twelve tools for account and app inspection, manifest preparation, validation, planning, apply, status, and service-key management. It shares your saved CLI login and keeps credentials in the OS credential store. Apply requires approval of a saved plan; direct service-key revocation also requires explicit confirmation.
+
+See [Connect an MCP client to Zorveus](docs/mcp.md) for client configuration, tool arguments, and the review-and-apply workflow.
 
 ## Sign in
 
@@ -400,6 +414,7 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `import` | Adopt an existing app into a manifest |
 | `clone` | Prepare a separate app configuration |
 | `promote` | Update a target JSON locally with source settings and target IDs |
+| `mcp serve` | Expose account, manifest, provisioning, and service-key operations to a local MCP client over stdio |
 | `status` | Compare the manifest with remote resources |
 | `service-keys list`, `service-keys revoke` | Inspect and revoke organization service keys |
 | `completion` | Generate shell completion scripts |

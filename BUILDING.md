@@ -52,6 +52,8 @@ python3 scripts/test_installer.py
 
 Unit tests use injected credential stores and local HTTP servers. They do not need a running Zorveus backend or modify your real OS credential store. Live verification uses real backend resources and credentials and requires separate setup.
 
+MCP tests exercise SDK client/server sessions and the CLI's stdio transport. They verify discovery, account inspection, manifest creation and copying, import, service-key revocation, saved-plan apply, retry behavior, and exclusion of credentials from responses and logs. The adapter is in `internal/mcpserver`; terminal registration is in `internal/cli/mcp.go`.
+
 Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, and cleanup.
 
 ## Build platform binaries

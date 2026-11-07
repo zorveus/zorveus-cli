@@ -22,6 +22,7 @@ import (
 type Dependencies struct {
 	Auth             *auth.Service
 	Secrets          provision.SecretStore
+	Stdin            io.Reader
 	InputIsTerminal  bool
 	OutputIsTerminal bool
 	OpenBrowser      func(context.Context, string) error
@@ -86,6 +87,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
+	root.SetIn(dependencies.Stdin)
 	root.SetArgs(arguments)
 	root.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return problem.New("invalid_arguments", "Invalid flags. Run zorveus --help for usage.", 2)
@@ -110,6 +112,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.AddCommand(importCommand(settings, dependencies, stdout))
 	root.AddCommand(statusCommand(settings, dependencies, stdout))
 	root.AddCommand(serviceKeysCommand(settings, dependencies, stdout))
+	root.AddCommand(mcpCommand(settings, dependencies, stdout, stderr))
 	settings.jsonOutput = requestedJSON(arguments)
 	command, err := root.ExecuteContextC(ctx)
 	if err == nil {
@@ -125,6 +128,12 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	commandName := "zorveus"
 	if command != nil {
 		commandName = command.CommandPath()
+	}
+	if isMCPCommand(command) {
+		// Even --json startup failures must leave the protocol stream untouched.
+		logger = slog.New(slog.NewJSONHandler(stderr, nil))
+		logger.Error("MCP server stopped", "code", failure.Code, "message", failure.Message)
+		return failure.ExitCode
 	}
 	logger.Debug("command failed", "command", commandName, "code", failure.Code)
 	if settings.jsonOutput {
