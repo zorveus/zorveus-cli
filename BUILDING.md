@@ -56,6 +56,10 @@ MCP tests exercise SDK client/server sessions and the CLI's stdio transport. The
 
 Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, and cleanup.
 
+The `internal/selfupdate` tests simulate HTTPS release responses and replace temporary executables. One test launches a temporary copy of the test binary and updates that running copy. These tests never update your installed CLI or download a release. The release workflow runs them on macOS, Linux, and Windows before publishing.
+
+On Windows, the updater moves the running executable to a `.zorveus-update-old` backup before installing its replacement. If Windows keeps that image locked, the backup remains until a later update removes it. Failed replacement attempts restore the original executable; a failed restore reports the backup path.
+
 ## Build platform binaries
 
 ```sh

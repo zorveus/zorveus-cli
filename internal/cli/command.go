@@ -18,6 +18,7 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/auth"
 	"github.com/zorveus/zorveus-cli/internal/problem"
 	"github.com/zorveus/zorveus-cli/internal/provision"
+	"github.com/zorveus/zorveus-cli/internal/selfupdate"
 )
 
 type Dependencies struct {
@@ -28,6 +29,7 @@ type Dependencies struct {
 	OutputIsTerminal bool
 	ErrorIsTerminal  bool
 	OpenBrowser      func(context.Context, string) error
+	UpdateCLI        func(context.Context, string) (selfupdate.Result, error)
 }
 
 const defaultLoginScopes = "apps:read apps:create apps:update apps:delete apps:rotate_secret " +
@@ -132,6 +134,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.AddCommand(statusCommand(settings, dependencies, stdout))
 	root.AddCommand(serviceKeysCommand(settings, dependencies, stdout))
 	root.AddCommand(mcpCommand(settings, dependencies, stdout, stderr))
+	root.AddCommand(updateCommand(settings, dependencies, stdout, stderr))
 	settings.jsonOutput = requestedJSON(arguments)
 	command, err := root.ExecuteContextC(ctx)
 	if err == nil {

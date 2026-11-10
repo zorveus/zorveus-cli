@@ -29,7 +29,7 @@ The [release workflow](../.github/workflows/release.yaml) runs when a version ta
 
 The workflow:
 
-1. Checks out the tagged commit and installs the Go version from `go.mod`.
+1. Checks out the tagged commit, installs the Go version from `go.mod`, and tests self-updating on macOS, Linux, and Windows.
 2. Runs race tests, vet, and installer tests.
 3. Builds macOS, Linux, and Windows executables for x86-64 and ARM64.
 4. Verifies the generated checksums and saves the website bundle as an Actions artifact for 14 days.
@@ -73,3 +73,5 @@ sh install-zorveus.sh --version v0.1.0 --bin-dir "$PWD/.cli-test/bin"
 ```
 
 Runtime verification, macOS signing and notarization, and Windows signing remain separate release checks. The current workflow cross-compiles unsigned binaries.
+
+`zorveus update` uses the same `cli/latest`, versioned binaries, and `SHA256SUMS` paths as the installer. No additional website redirect is required. The command becomes available to installed users after they install a release containing it; it updates published executables rather than building unpublished source changes.

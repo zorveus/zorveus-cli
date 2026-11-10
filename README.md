@@ -31,7 +31,7 @@ zorveus --help
 
 Add that `export PATH` line to your shell's startup file, such as `~/.zshrc` for zsh or `~/.bashrc` for Bash, to keep it available in new terminals.
 
-Run the installer again to update to the latest release. To inspect the script, choose a version, or change the destination, download it first:
+To inspect the script, choose a version, or change the destination, download it first:
 
 ```sh
 curl -fsSL https://zorveus.com/install.sh -o install-zorveus.sh
@@ -68,6 +68,26 @@ zorveus --help
 For new terminals, add `%LOCALAPPDATA%\Zorveus\bin` to your user's `Path` through Windows Environment Variables.
 
 Login and credential creation use Keychain on macOS, Secret Service on Linux, or Credential Manager on Windows. Your credential store must be available and unlocked.
+
+### Update
+
+Install the latest published stable release:
+
+```sh
+zorveus update
+```
+
+To install a specific release instead:
+
+```sh
+zorveus update --version v0.1.0
+```
+
+The command selects the release for your operating system and processor, verifies its SHA-256 checksum, and replaces the executable you invoked. It reports when that release is already installed. Updating requires write access to the installation directory and does not require a Zorveus login.
+
+Updates preserve your saved login, stored secrets, and project files. A failed download or checksum check leaves the executable unchanged. Use `--json --non-interactive` for a structured result in scripts.
+
+Running `./bin/zorveus update` replaces that local build with a published release. To use newly changed source code, rebuild it using the [build guide](BUILDING.md). If your installed version does not have `update` yet, rerun the installer or use the Windows installation steps above once.
 
 To build or contribute to the CLI, see [Building Zorveus](BUILDING.md).
 
@@ -428,6 +448,7 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | Command | Purpose |
 | --- | --- |
 | `login`, `whoami`, `logout` | Manage your CLI session |
+| `update` | Install the latest published CLI release, or a selected `--version` |
 | `apps list` | List apps in the selected organization |
 | `init`, `validate` | Create and check a manifest offline |
 | `setup` | Configure customer allowance plans and optional routing, review, and apply resources |
