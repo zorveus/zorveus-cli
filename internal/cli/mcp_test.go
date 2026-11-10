@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/zorveus/zorveus-cli/internal/api"
+	"github.com/zorveus/zorveus-cli/internal/auth"
 )
 
 func TestMCPStartupErrorsLeaveStdoutEmptyEvenWithJSON(t *testing.T) {
@@ -45,8 +47,18 @@ func TestMCPStdioCompletesHandshakeAndServesTools(t *testing.T) {
 	defer serverOutput.Close()
 	var diagnostics bytes.Buffer
 	finished := make(chan int, 1)
+	dependencies := testDependencies(&testStore{present: true, login: auth.Login{
+		APIOrigin: "https://api.zorveus.com", ClientID: api.ClientID, Organization: "org_a",
+		AccessToken: "blocked-access", RefreshBlocked: true, Scope: defaultLoginScopes, ExpiresAt: time.Now().Add(time.Hour),
+	}})
+	dependencies.Stdin = serverInput
+	dependencies.InputIsTerminal = true
+	dependencies.OpenBrowser = func(context.Context, string) error {
+		t.Error("MCP must not start browser login, even with terminal input")
+		return nil
+	}
 	go func() {
-		finished <- Execute(ctx, []string{"mcp", "serve", "--directory", directory, "--json"}, serverOutput, &diagnostics, Dependencies{Stdin: serverInput})
+		finished <- Execute(ctx, []string{"mcp", "serve", "--directory", directory, "--json"}, serverOutput, &diagnostics, dependencies)
 	}()
 	client := mcp.NewClient(&mcp.Implementation{Name: "stdio-test", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &mcp.IOTransport{Reader: clientInput, Writer: clientOutput}, nil)
@@ -61,6 +73,11 @@ func TestMCPStdioCompletesHandshakeAndServesTools(t *testing.T) {
 	if err != nil || result.IsError || result.StructuredContent == nil {
 		t.Fatalf("stdio tools/call failed: %+v %v", result, err)
 	}
+	identity, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "zorveus_whoami", Arguments: map[string]any{}})
+	encoded, _ := json.Marshal(identity)
+	if err != nil || identity == nil || !identity.IsError || !strings.Contains(string(encoded), "login_required") {
+		t.Fatalf("MCP renewal failure did not return a login error: %s %v", encoded, err)
+	}
 	if err := session.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +91,13 @@ func TestMCPStdioCompletesHandshakeAndServesTools(t *testing.T) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(diagnostics.String()), "\n") {
 		var event map[string]any
-		if json.Unmarshal([]byte(line), &event) != nil || event["msg"] != "tool completed" {
+		if json.Unmarshal([]byte(line), &event) != nil {
+			t.Fatalf("unexpected stderr diagnostics: %s", diagnostics.String())
+		}
+		if event["msg"] == "tool completed" {
+			continue
+		}
+		if event["msg"] != "tool failed" || event["tool"] != "zorveus_whoami" || event["code"] != "login_required" {
 			t.Fatalf("unexpected stderr diagnostics: %s", diagnostics.String())
 		}
 	}

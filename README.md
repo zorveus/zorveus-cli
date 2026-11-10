@@ -73,6 +73,8 @@ To build or contribute to the CLI, see [Building Zorveus](BUILDING.md).
 
 ## Your first app
 
+To configure customer allowance plans through guided prompts, run `zorveus setup`. The wizard handles sign-in, app and model configuration, one or more plans, review, and apply. See [Set up customer allowance plans](docs/setup.md) for a walkthrough and non-interactive inputs.
+
 Follow this path to create an app and learn the main workflow:
 
 1. [Sign in](#sign-in). Choose your organization and request the permissions for the example. Confirm the account and organization with `zorveus whoami`.
@@ -115,6 +117,10 @@ zorveus login --scope "apps:read"
 ```
 
 The CLI keeps one saved login. Signing in again replaces it. To request different permissions or switch organizations, run `login` again. Your organization role still determines which operations you can perform.
+
+If renewal fails or your session expires without renewal, an interactive command explains what happened and waits for Enter before opening browser sign-in. After sign-in, the command continues from where it stopped. Sign in with the same organization and user for an existing plan. Setup keeps your answers, and apply keeps its recorded progress. Press Ctrl+C to cancel. The CLI never retries a refresh token whose outcome is uncertain.
+
+Commands with `--non-interactive`, commands without a terminal, and MCP tools return a login error instead. Run `zorveus login` from your terminal, then retry them.
 
 Use `login --no-browser` to print the authorization URL and open it in your preferred browser. To end the CLI session:
 
@@ -200,7 +206,19 @@ zorveus status --config zorveus.json
 
 Apply creates or updates the resources and writes their IDs back into your manifest. Keep those IDs when editing existing resources. Running plan again after a successful apply produces zero changes when the configuration matches.
 
-The CLI saves newly generated secrets in your OS credential store and reports their account names. Secrets do not appear in the manifest, saved plans, or command output. On macOS, use Keychain Access to find entries under `com.zorveus.cli.resources` with the reported account name.
+The CLI saves newly generated secrets in your OS credential store. Secrets do not appear in the manifest, saved plans, or apply output. Saved credentials are associated with resource IDs, so later applies and display-name changes do not lose them.
+
+To retrieve one secret, select its manifest reference or ID:
+
+```sh
+zorveus retrieve keys.backend
+zorveus retrieve app
+zorveus retrieve routingKeys.primary --config zorveus.dev.json
+zorveus retrieve serviceKeys.customers --config zorveus.dev.json
+zorveus retrieve aconn_example --config zorveus.dev.json
+```
+
+Use names and IDs from your own manifest. `retrieve` prints only the selected secret; `--json` returns its item, ID, and secret in the result envelope. It reads the local OS credential store and never rotates a key. See [Retrieve saved secrets](docs/setup.md#retrieve-saved-secrets) for copying values, scripts, and missing credentials.
 
 If you edit the manifest or a planned remote value changes, run `zorveus plan` again before applying. A successful plan replaces the existing plan for that manifest at the same output path. If planning fails, the previous file is preserved. The default plan filename follows the manifest: `zorveus.dev.json` produces `zorveus.dev.plan.json` in the same directory. With `--from`, the filename follows the target `--config` file. Use `--out` to choose another path.
 
@@ -364,6 +382,8 @@ zorveus apps list
 
 For other environments, use `--api-url` and `login --dashboard-url`. Custom HTTP origins must use loopback addresses and require `--allow-insecure-loopback`.
 
+The CLI saves the dashboard URL for sign-in recovery. If an older login uses a custom API origin, run `login` with both URLs once to save that dashboard URL.
+
 ## Shell completion
 
 Load zsh completion in your current terminal:
@@ -401,7 +421,7 @@ Normal terminal errors show a readable message. Use `--log-level debug` when you
 | 4 | Target mismatch, stale plan, or changed manifest |
 | 5 | Incomplete apply or uncertain mutation outcome |
 
-Login requires an interactive terminal and browser consent. Other commands can use a saved login with an available OS credential store. Renewal is optional during consent; without it, sign in again after the access token expires. Hosts without an OS credential store are not supported.
+Login requires an interactive terminal and browser consent. Other commands can use a saved login with an available OS credential store. Renewal is optional during consent. When renewal is unavailable or fails, interactive commands wait for Enter before opening sign-in. Hosts without an OS credential store are not supported.
 
 ## Command reference
 
@@ -410,6 +430,8 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `login`, `whoami`, `logout` | Manage your CLI session |
 | `apps list` | List apps in the selected organization |
 | `init`, `validate` | Create and check a manifest offline |
+| `setup` | Configure customer allowance plans, review, and apply resources |
+| `retrieve` | Print a saved secret by manifest reference or resource ID |
 | `plan`, `apply` | Review and apply configuration changes |
 | `import` | Adopt an existing app into a manifest |
 | `clone` | Prepare a separate app configuration |

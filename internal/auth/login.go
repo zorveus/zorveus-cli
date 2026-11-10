@@ -16,10 +16,12 @@ import (
 )
 
 type LoginOptions struct {
-	APIOrigin       string
-	DashboardOrigin string
-	Scope           string
-	OpenBrowser     func(context.Context, string)
+	APIOrigin            string
+	DashboardOrigin      string
+	Scope                string
+	ExpectedOrganization string
+	ExpectedUser         string
+	OpenBrowser          func(context.Context, string)
 }
 
 type callbackResult struct {
@@ -79,8 +81,18 @@ func (service *Service) Login(ctx context.Context, options LoginOptions) (LoginS
 			return LoginSummary{}, err
 		}
 		login := loginFromTokens(options.APIOrigin, tokens, requestedAt)
+		login.DashboardOrigin = options.DashboardOrigin
 		if !scopesAreSubset(tokens.Scope, options.Scope) {
 			return LoginSummary{}, service.discardLogin(login, "The API returned permissions that were not requested.")
+		}
+		if options.ExpectedOrganization != "" && login.Organization != options.ExpectedOrganization {
+			return LoginSummary{}, service.discardLogin(login, loginTargetChanged().Error())
+		}
+		if options.ExpectedUser != "" {
+			user, err := service.loginUser(ctx, login)
+			if err != nil || user != options.ExpectedUser {
+				return LoginSummary{}, service.discardLogin(login, "Could not confirm the same user. Sign in with the original account to continue.")
+			}
 		}
 		return service.replaceLogin(ctx, login)
 	}
@@ -110,7 +122,8 @@ func (service *Service) replaceLogin(ctx context.Context, replacement Login) (Lo
 		return LoginSummary{}, service.discardLogin(replacement, "Could not read the previous login. It was not replaced.")
 	}
 	if err == nil {
-		if err := service.revokeLogin(ctx, previous); err != nil {
+		// An uncertain refresh may have consumed the only token we can revoke.
+		if err := service.revokeLogin(ctx, previous); err != nil && !previous.RefreshBlocked {
 			return LoginSummary{}, service.discardLogin(replacement, "Could not confirm revocation of the previous login. Its saved credentials were retained. Retry login or revoke the session from the dashboard.")
 		}
 	}

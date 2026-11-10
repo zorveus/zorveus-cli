@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,7 @@ type Dependencies struct {
 	Stdin            io.Reader
 	InputIsTerminal  bool
 	OutputIsTerminal bool
+	ErrorIsTerminal  bool
 	OpenBrowser      func(context.Context, string) error
 }
 
@@ -54,6 +56,12 @@ type resultEnvelope struct {
 }
 
 func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, dependencies Dependencies) int {
+	// Browser recovery belongs to this invocation, never to a shared MCP service.
+	if dependencies.Auth != nil {
+		service := *dependencies.Auth
+		service.RequestLogin = nil
+		dependencies.Auth = &service
+	}
 	settings := &flags{}
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 	root := &cobra.Command{
@@ -63,6 +71,15 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		PersistentPreRunE: func(command *cobra.Command, arguments []string) error {
+			if dependencies.Auth != nil && dependencies.InputIsTerminal && !settings.nonInteractive && !isMCPCommand(command) {
+				input := command.InOrStdin()
+				if command.Name() == "setup" {
+					// Setup and sign-in prompts must share any input already buffered.
+					input = bufio.NewReader(input)
+					command.Root().SetIn(input)
+				}
+				dependencies.Auth.RequestLogin = loginRecovery(settings, dependencies, input, stderr)
+			}
 			level := new(slog.Level)
 			if err := level.UnmarshalText([]byte(settings.logLevel)); err != nil {
 				return problem.New("invalid_log_level", "Use --log-level debug, info, warn, or error.", 2)
@@ -104,6 +121,8 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.AddCommand(whoamiCommand(settings, dependencies, stdout))
 	root.AddCommand(logoutCommand(settings, dependencies, stdout))
 	root.AddCommand(initCommand(settings, stdout))
+	root.AddCommand(setupCommand(settings, dependencies, stdout, stderr))
+	root.AddCommand(retrieveCommand(settings, dependencies, stdout))
 	root.AddCommand(validateCommand(settings, stdout, stderr))
 	root.AddCommand(cloneCommand(settings, stdout))
 	root.AddCommand(promoteCommand(settings, stdout))
@@ -139,7 +158,8 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	if settings.jsonOutput {
 		_ = json.NewEncoder(stdout).Encode(resultEnvelope{Version: 1, OK: false, Command: commandName, Error: failure})
 	} else {
-		_, _ = fmt.Fprintln(stderr, failure.Message)
+		message := planColor(terminalText(failure.Message), terminalError, terminalColors(settings, dependencies.ErrorIsTerminal))
+		_, _ = fmt.Fprintln(stderr, message)
 		if failure.Pointer != nil {
 			_, _ = fmt.Fprintf(stderr, "JSON Pointer: %q\n", *failure.Pointer)
 		}
@@ -158,6 +178,7 @@ func loginCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 		Args:              noArguments,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(command *cobra.Command, arguments []string) error {
+			ui := terminalUI{output: stdout, color: terminalColors(settings, dependencies.OutputIsTerminal)}
 			if settings.nonInteractive || !dependencies.InputIsTerminal {
 				return problem.New("interactive_login_required", "Login requires an interactive terminal and browser authorization.", 3)
 			}
@@ -178,37 +199,24 @@ func loginCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 			if scopes == "" || timeout <= 0 || timeout > 30*time.Minute {
 				return problem.New("invalid_arguments", "Provide at least one scope and a login timeout greater than zero and at most 30 minutes.", 2)
 			}
-			ctx, cancel := context.WithTimeout(command.Context(), timeout)
-			defer cancel()
-			result, err := dependencies.Auth.Login(ctx, auth.LoginOptions{
+			result, err := browserLogin(command.Context(), settings, dependencies, stderr, auth.LoginOptions{
 				APIOrigin:       settings.apiOrigin,
 				DashboardOrigin: dashboard,
 				Scope:           scopes,
-				OpenBrowser: func(ctx context.Context, address string) {
-					if manualBrowser {
-						_, _ = fmt.Fprintln(stderr, "Open this authorization URL:", address)
-						return
-					}
-					_, _ = fmt.Fprintln(stderr, "Complete login and organization selection in your browser.")
-					if err := dependencies.OpenBrowser(ctx, address); err != nil {
-						_, _ = fmt.Fprintln(stderr, "Open this authorization URL:", address)
-					}
-				},
-			})
+			}, timeout, manualBrowser)
 			if err != nil {
 				return err
-			}
-			if result.PreviousSessionMayRemain {
-				_, _ = fmt.Fprintln(stderr, "The previous session had an uncertain refresh outcome. Revoke that session from the dashboard.")
 			}
 			if settings.jsonOutput {
 				return writeJSON(stdout, command.CommandPath(), result)
 			}
-			_, err = fmt.Fprintln(stdout, "Logged in to organization", terminalText(result.Organization))
-			if !result.Renewal {
-				_, _ = fmt.Fprintln(stderr, "Renewal was not approved. Log in again when the access token expires.")
+			if err := ui.success("Signed in"); err != nil {
+				return err
 			}
-			return outputError(err)
+			if err := ui.field("Organization", result.Organization); err != nil {
+				return err
+			}
+			return nil
 		},
 	}
 	command.Flags().StringVar(&scope, "scope", defaultLoginScopes, "Space-separated management scopes; defaults to all CLI permissions")

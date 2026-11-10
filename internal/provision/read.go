@@ -22,10 +22,8 @@ type gateway struct {
 }
 
 func (remote *gateway) call(scopes []string, run func(*api.Client, auth.Login) error) error {
-	return remote.service.Auth.UseLogin(remote.ctx, remote.target.Origin, scopes, func(login auth.Login) error {
-		if remote.target.Org != "" && login.Organization != remote.target.Org {
-			return conflict()
-		}
+	target := auth.LoginTarget{APIOrigin: remote.target.Origin, Organization: remote.target.Org, UserID: remote.target.User}
+	return remote.service.Auth.UseLogin(remote.ctx, target, scopes, func(login auth.Login) error {
 		return run(remote.service.Auth.API, login)
 	})
 }

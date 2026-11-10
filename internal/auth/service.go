@@ -11,10 +11,17 @@ import (
 )
 
 type Service struct {
-	API   *api.Client
-	Store Store
-	Lock  func(context.Context) (func(), error)
-	Now   func() time.Time
+	API          *api.Client
+	Store        Store
+	Lock         func(context.Context) (func(), error)
+	Now          func() time.Time
+	RequestLogin func(context.Context, LoginOptions) error
+}
+
+type LoginTarget struct {
+	APIOrigin    string
+	Organization string
+	UserID       string
 }
 
 type LoginSummary struct {
@@ -45,42 +52,21 @@ type WhoamiResult struct {
 	Session      api.MeSession `json:"session"`
 }
 
-func (service *Service) UseLogin(ctx context.Context, expectedOrigin string, scopes []string, run func(Login) error) error {
-	unlock, err := service.Lock(ctx)
+func (service *Service) UseLogin(ctx context.Context, target LoginTarget, scopes []string, run func(Login) error) error {
+	current, unlock, err := service.loginForOperation(ctx, target, scopes)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	login, err := service.loadLogin(expectedOrigin)
-	if err != nil {
-		return err
-	}
-	current, err := service.renewLogin(ctx, login)
-	if err != nil {
-		return err
-	}
-	for _, scope := range scopes {
-		if !hasScope(current.Scope, scope) {
-			return problem.New("authorization_required", "This operation needs "+strings.Join(scopes, " ")+". Log in again with those --scope values.", 3)
-		}
-	}
 	return run(current)
 }
 
 func (service *Service) Whoami(ctx context.Context, expectedOrigin string) (WhoamiResult, error) {
-	unlock, err := service.Lock(ctx)
+	currentLogin, unlock, err := service.loginForOperation(ctx, LoginTarget{APIOrigin: expectedOrigin}, nil)
 	if err != nil {
 		return WhoamiResult{}, err
 	}
 	defer unlock()
-	login, err := service.loadLogin(expectedOrigin)
-	if err != nil {
-		return WhoamiResult{}, err
-	}
-	currentLogin, err := service.renewLogin(ctx, login)
-	if err != nil {
-		return WhoamiResult{}, err
-	}
 	me, err := service.API.GetMe(ctx, currentLogin.APIOrigin, currentLogin.Organization, currentLogin.AccessToken)
 	if err != nil {
 		return WhoamiResult{}, err
@@ -92,32 +78,16 @@ func (service *Service) Whoami(ctx context.Context, expectedOrigin string) (Whoa
 }
 
 func (service *Service) Apps(ctx context.Context, expectedOrigin string, limit int) (AppsResult, error) {
-	unlock, err := service.Lock(ctx)
-	if err != nil {
-		return AppsResult{}, err
-	}
-	defer unlock()
-	login, err := service.loadLogin(expectedOrigin)
-	if err != nil {
-		return AppsResult{}, err
-	}
-	if !hasScope(login.Scope, "apps:read") {
-		return AppsResult{}, problem.New("authorization_required", "This command needs apps:read. Run zorveus login --scope apps:read.", 3)
-	}
-	currentLogin, err := service.renewLogin(ctx, login)
-	if err != nil {
-		return AppsResult{}, err
-	}
-	result, err := service.API.ListApps(ctx, currentLogin.APIOrigin, currentLogin.Organization, currentLogin.AccessToken, limit)
-	if err != nil {
-		return AppsResult{}, err
-	}
-	return AppsResult{
-		Organization: currentLogin.Organization,
-		Apps:         result.Apps,
-		Limit:        limit,
-		MayHaveMore:  len(result.Apps) == limit,
-	}, nil
+	var result AppsResult
+	err := service.UseLogin(ctx, LoginTarget{APIOrigin: expectedOrigin}, []string{"apps:read"}, func(login Login) error {
+		apps, err := service.API.ListApps(ctx, login.APIOrigin, login.Organization, login.AccessToken, limit)
+		if err != nil {
+			return err
+		}
+		result = AppsResult{Organization: login.Organization, Apps: apps.Apps, Limit: limit, MayHaveMore: len(apps.Apps) == limit}
+		return nil
+	})
+	return result, err
 }
 
 func (service *Service) renewLogin(ctx context.Context, login Login) (Login, error) {
@@ -143,6 +113,7 @@ func (service *Service) renewLogin(ctx context.Context, login Login) (Login, err
 		return Login{}, problem.New("invalid_refresh_response", "The renewal response changed the authorized target or permissions. Run zorveus login and revoke the old session from the dashboard.", 3)
 	}
 	replacement := loginFromTokens(login.APIOrigin, tokens, requestedAt)
+	replacement.DashboardOrigin = login.DashboardOrigin
 	if err := service.Store.Save(replacement); err != nil {
 		return Login{}, problem.New("credential_save_failed", "The renewed credentials could not be saved. Run zorveus login and revoke the old session from the dashboard.", 3)
 	}

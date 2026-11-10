@@ -225,3 +225,37 @@ func TestLoginWithoutRenewalSavesOnlyTheAccessToken(t *testing.T) {
 		t.Fatalf("login without renewal was not saved correctly: %v", err)
 	}
 }
+
+func TestRecoveryRejectsDifferentAccountBeforeReplacingSavedLogin(t *testing.T) {
+	for _, changed := range []string{"organization", "user"} {
+		t.Run(changed, func(t *testing.T) {
+			revoked := []string{}
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				_ = request.ParseForm()
+				switch request.URL.Path {
+				case "/oauth/management/token":
+					organization := "org_a"
+					if changed == "organization" {
+						organization = "org_b"
+					}
+					sendTokens(writer, organization)
+				case "/me":
+					_, _ = writer.Write([]byte(`{"user":{"user_id":"other_user","email":"other@example.test"},"session":{"authenticated":true,"expires_at":"2099-01-01T00:00:00Z"}}`))
+				case "/oauth/management/revoke":
+					revoked = append(revoked, request.Form.Get("token"))
+				}
+			}))
+			defer server.Close()
+			previous := savedLogin(server.URL)
+			store := &memoryStore{present: true, login: previous}
+			_, err := testService(store).Login(context.Background(), LoginOptions{
+				APIOrigin: server.URL, DashboardOrigin: "https://dashboard.example.test", Scope: "apps:read",
+				ExpectedOrganization: "org_a", ExpectedUser: "original_user",
+				OpenBrowser: func(_ context.Context, address string) { completeBrowserLogin(t, address, "approve") },
+			})
+			if err == nil || store.login != previous || len(revoked) != 1 || revoked[0] != "new-refresh" {
+				t.Fatalf("wrong account replaced the saved login: error=%v revoked=%v", err, revoked)
+			}
+		})
+	}
+}

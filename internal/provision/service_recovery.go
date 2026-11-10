@@ -25,13 +25,13 @@ func (run *execution) recoverServiceCredential(index int, step Step, account str
 	if progress.SecretPrefix != "" && current.TokenPrefix != progress.SecretPrefix {
 		return conflict()
 	}
-	// Persist intent before the request, since rotation preserves the resource ID.
-	progress.RotationStarted, progress.RotationReceived = true, false
-	if err := run.save(); err != nil {
-		return err
-	}
 	var replacement api.ServiceKeyCredential
 	err = run.remote.call(stepScopes(step), func(client *api.Client, login auth.Login) error {
+		// Authenticate first, then record intent immediately before sending rotation.
+		progress.RotationStarted, progress.RotationReceived = true, false
+		if err := run.save(); err != nil {
+			return err
+		}
 		var err error
 		replacement, err = client.RotateServiceKey(run.remote.ctx, login.APIOrigin, login.Organization, progress.ID, login.AccessToken)
 		return err

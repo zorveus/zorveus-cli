@@ -16,14 +16,15 @@ import (
 var ErrNoLogin = errors.New("no saved login")
 
 type Login struct {
-	APIOrigin      string    `json:"api_origin"`
-	ClientID       string    `json:"client_id"`
-	Organization   string    `json:"organization"`
-	AccessToken    string    `json:"access_token"`
-	RefreshToken   string    `json:"refresh_token,omitempty"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	Scope          string    `json:"scope"`
-	RefreshBlocked bool      `json:"refresh_blocked,omitempty"`
+	APIOrigin       string    `json:"api_origin"`
+	DashboardOrigin string    `json:"dashboard_origin,omitempty"`
+	ClientID        string    `json:"client_id"`
+	Organization    string    `json:"organization"`
+	AccessToken     string    `json:"access_token"`
+	RefreshToken    string    `json:"refresh_token,omitempty"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	Scope           string    `json:"scope"`
+	RefreshBlocked  bool      `json:"refresh_blocked,omitempty"`
 }
 
 type Store interface {

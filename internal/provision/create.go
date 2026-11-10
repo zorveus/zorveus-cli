@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/zorveus/zorveus-cli/internal/api"
+	"github.com/zorveus/zorveus-cli/internal/auth"
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
@@ -40,12 +41,15 @@ func (run *execution) create(index int, step Step) error {
 	if err != nil {
 		return err
 	}
-	progress.Started = true
-	if err := run.save(); err != nil {
-		return err
-	}
 	var response createdResource
-	requestErr := run.write(step, method, path, payload, &response)
+	requestErr := run.remote.call(stepScopes(step), func(client *api.Client, login auth.Login) error {
+		// A canceled sign-in must not record a creation request that was never sent.
+		progress.Started = true
+		if err := run.save(); err != nil {
+			return err
+		}
+		return client.WriteJSON(run.remote.ctx, login.APIOrigin, method, path, login.AccessToken, payload, &response)
+	})
 	id, credentialID, secret := run.createdIdentity(step, response)
 	if id == "" {
 		if requestErr != nil {
@@ -76,7 +80,7 @@ func (run *execution) create(index int, step Step) error {
 		return incomplete()
 	}
 	if stepHasCredential(step) {
-		if err := run.secrets.Save(account, Credential{id, credentialID, secret}); err != nil {
+		if err := run.secrets.Save(account, Credential{ResourceID: id, CredentialID: credentialID, Secret: secret}); err != nil {
 			return err
 		}
 	}
@@ -244,7 +248,7 @@ func (run *execution) recoverCredential(index int, step Step, account string) er
 	if secret == "" {
 		return incomplete()
 	}
-	if err := run.secrets.Save(account, Credential{id, credentialID, secret}); err != nil {
+	if err := run.secrets.Save(account, Credential{ResourceID: id, CredentialID: credentialID, Secret: secret}); err != nil {
 		return err
 	}
 	progress.Done = true

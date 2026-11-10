@@ -77,6 +77,9 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 		if digest(current) != journal.FinalDigest {
 			return ApplyResult{}, conflict()
 		}
+		if err := service.rememberCredentials(plan, journal, true); err != nil {
+			return ApplyResult{}, err
+		}
 		return applyResult(plan, journal), nil
 	}
 	if !resuming {
@@ -134,6 +137,9 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 			}
 			return ApplyResult{}, err
 		}
+	}
+	if err := service.rememberCredentials(plan, run.journal, false); err != nil {
+		return ApplyResult{}, err
 	}
 	if err := run.finish(); err != nil {
 		return ApplyResult{}, err

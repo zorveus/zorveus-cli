@@ -28,8 +28,10 @@ func run() int {
 	}
 	return cli.Execute(ctx, os.Args[1:], os.Stdout, os.Stderr, cli.Dependencies{
 		Auth:             service,
+		Stdin:            os.Stdin,
 		InputIsTerminal:  term.IsTerminal(int(os.Stdin.Fd())),
 		OutputIsTerminal: term.IsTerminal(int(os.Stdout.Fd())),
+		ErrorIsTerminal:  term.IsTerminal(int(os.Stderr.Fd())),
 		OpenBrowser:      cli.OpenBrowser,
 	})
 }

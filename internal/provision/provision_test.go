@@ -490,8 +490,8 @@ func TestCreateWritesIDsResolvesAliasesAndConverges(t *testing.T) {
 	if backend.caps["conn_1"].text("amount") != "100.000000000001" {
 		t.Fatal("decimal cap lost precision")
 	}
-	if len(service.Secrets.(*memorySecrets).values) != 4 {
-		t.Fatal("one-time credentials not delivered")
+	if len(service.Secrets.(*memorySecrets).values) != 8 {
+		t.Fatal("credentials must be saved for both operation recovery and resource lookup")
 	}
 	if _, err := service.Apply(context.Background(), "", path, true, false); err != nil {
 		t.Fatal(err)

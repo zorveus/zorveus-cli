@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -30,7 +29,7 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 			if settings.jsonOutput {
 				return writeJSON(stdout, command.CommandPath(), result)
 			}
-			color := dependencies.OutputIsTerminal && !settings.noColor && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+			color := terminalColors(settings, dependencies.OutputIsTerminal)
 			_, err = io.WriteString(stdout, formatPlan(result, color))
 			return outputError(err)
 		},
@@ -64,8 +63,8 @@ func applyCommand(settings *flags, dependencies Dependencies, stdout io.Writer) 
 			if _, err := fmt.Fprintf(stdout, "Applied plan. App: %s\nUpdated manifest: %s\n", terminalText(result.AppID), terminalText(result.Config)); err != nil {
 				return outputError(err)
 			}
-			for _, account := range result.CredentialAccounts {
-				if _, err := fmt.Fprintf(stdout, "Credential saved in OS credential store: %s\n", terminalText(account)); err != nil {
+			if len(result.CredentialAccounts) > 0 {
+				if _, err := fmt.Fprintln(stdout, "Secrets saved in your OS credential store. Use zorveus retrieve to read one."); err != nil {
 					return outputError(err)
 				}
 			}

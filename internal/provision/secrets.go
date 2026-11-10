@@ -14,6 +14,7 @@ type Credential struct {
 	ResourceID   string `json:"resource_id"`
 	CredentialID string `json:"credential_id"`
 	Secret       string `json:"-"`
+	TokenPrefix  string `json:"token_prefix,omitempty"`
 }
 
 type SecretStore interface {
@@ -51,11 +52,12 @@ func (CredentialStore) Load(account string) (Credential, error) {
 		ResourceID   string `json:"resource_id"`
 		CredentialID string `json:"credential_id"`
 		Secret       string `json:"secret"`
+		TokenPrefix  string `json:"token_prefix,omitempty"`
 	}
 	if json.Unmarshal([]byte(value), &wire) != nil || wire.Secret == "" {
 		return Credential{}, secretStoreError()
 	}
-	return Credential{ResourceID: wire.ResourceID, CredentialID: wire.CredentialID, Secret: wire.Secret}, nil
+	return Credential{ResourceID: wire.ResourceID, CredentialID: wire.CredentialID, Secret: wire.Secret, TokenPrefix: wire.TokenPrefix}, nil
 }
 
 func (CredentialStore) Save(account string, value Credential) error {
@@ -63,7 +65,8 @@ func (CredentialStore) Save(account string, value Credential) error {
 		ResourceID   string `json:"resource_id"`
 		CredentialID string `json:"credential_id"`
 		Secret       string `json:"secret"`
-	}{value.ResourceID, value.CredentialID, value.Secret}
+		TokenPrefix  string `json:"token_prefix,omitempty"`
+	}{value.ResourceID, value.CredentialID, value.Secret, value.TokenPrefix}
 	data, err := json.Marshal(wire)
 	if err != nil {
 		return secretStoreError()
