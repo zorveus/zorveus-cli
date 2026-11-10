@@ -12,11 +12,17 @@ type SaaSPlan struct {
 	Allowance string
 }
 
+type SaaSRouting struct {
+	Name            string
+	DefaultSelector string
+}
+
 type SaaSOptions struct {
 	Name          string
 	Models        []string
 	CreditsPerUSD string
 	Plans         []SaaSPlan
+	Routing       *SaaSRouting
 }
 
 // SaaS builds the same manifest for guided and non-interactive setup.
@@ -48,12 +54,30 @@ func SaaS(options SaaSOptions) ([]byte, error) {
 			"cap": map[string]string{"amount": plan.Allowance, "currency": "USD", "period": "monthly"},
 		}
 	}
-	return encodeAndValidate(map[string]any{
+	document := map[string]any{
 		"version":     1,
 		"app":         map[string]any{"name": options.Name, "allowedModels": options.Models, "creditUnitsPerUsd": options.CreditsPerUSD},
 		"keys":        keys,
 		"serviceKeys": map[string]any{"customers": map[string]any{"name": "Customer reads", "scopes": []string{"product_users:read"}}},
-	})
+	}
+	if options.Routing != nil {
+		members := make([]string, 0, len(options.Plans))
+		for _, plan := range options.Plans {
+			members = append(members, plan.Reference)
+		}
+		name := options.Routing.Name
+		if name == "" {
+			name = options.Name + " router"
+		}
+		selector := options.Routing.DefaultSelector
+		if selector == "" {
+			selector = members[0]
+		}
+		document["routingKeys"] = map[string]any{"primary": map[string]any{
+			"name": name, "members": members, "defaultSelector": selector,
+		}}
+	}
+	return encodeAndValidate(document)
 }
 
 func InitSaaS(path string, options SaaSOptions) (FileResult, error) {

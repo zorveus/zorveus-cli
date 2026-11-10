@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zorveus/zorveus-cli/internal/manifest"
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
@@ -59,6 +60,42 @@ func TestRetrieveAllGeneratedSecretsByReferenceAndIDWithoutWrites(t *testing.T) 
 	data, _ := os.ReadFile(config)
 	if strings.Contains(string(data), "private-") {
 		t.Fatal("retrieval wrote a secret into the manifest")
+	}
+}
+
+func TestSaaSRoutingCreatesAfterItsPlanKeysAndCanBeRetrieved(t *testing.T) {
+	service, backend, _, config, path := setup(t)
+	data, err := manifest.SaaS(manifest.SaaSOptions{Name: "Demo", CreditsPerUSD: "100", Plans: []manifest.SaaSPlan{
+		{Reference: "plus", Name: "Plus", Allowance: "10"},
+		{Reference: "pro", Name: "Pro", Allowance: "30"},
+	}, Routing: &manifest.SaaSRouting{DefaultSelector: "pro"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	planAndApply(t, service, config, path)
+	if backend.writes[len(backend.writes)-1] != "POST /orgs/org_a/apps/app_a/routing-keys" || len(backend.connections) != 2 {
+		t.Fatalf("routing was created before its keys: %v", backend.writes)
+	}
+	router := backend.routers["router_1"]
+	if router.text("default_selector_alias") != "pro" {
+		t.Fatal("routing default was not resolved from the plan reference")
+	}
+	var members []Fields
+	_ = json.Unmarshal(router["members"], &members)
+	if len(members) != 2 || members[0].text("selector_alias") != "plus" || members[1].text("selector_alias") != "pro" || members[0].text("app_connection_id") != "conn_1" || members[1].text("app_connection_id") != "conn_2" {
+		t.Fatal("plan references did not resolve to their existing connection and key IDs")
+	}
+	writes := len(backend.writes)
+	result, err := service.Retrieve(context.Background(), "", config, "routingKeys.primary")
+	if err != nil || result.Secret != "private-routing-secret" {
+		t.Fatalf("setup router secret was not retrievable: %v", err)
+	}
+	planAndApply(t, service, config, path+".unchanged")
+	if len(backend.writes) != writes {
+		t.Fatal("unchanged routing was recreated or rotated")
 	}
 }
 

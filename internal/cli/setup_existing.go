@@ -123,6 +123,14 @@ func showExistingSetup(ui terminalUI, path string, document *manifest.Document) 
 			ui.field(section.label, fmt.Sprint(count))
 		}
 	}
+	for _, router := range document.Resources("routingKeys") {
+		if router.Name != "primary" {
+			continue
+		}
+		name, _ := router.Fields["name"].(string)
+		selector, _ := router.Fields["defaultSelector"].(string)
+		defaults.Routing = &manifest.SaaSRouting{Name: name, DefaultSelector: selector}
+	}
 	return defaults, nil
 }
 

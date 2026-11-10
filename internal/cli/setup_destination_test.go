@@ -36,7 +36,7 @@ func TestSetupDetectsOldStateBeforeCollectingNewAnswers(t *testing.T) {
 	config := filepath.Join(t.TempDir(), "zorveus.json")
 	statePath, stateBefore := savedSetupState(t, config)
 	dependencies := wizardDependencies(t)
-	dependencies.Stdin = strings.NewReader("y\n\n\n\n\nn\n")
+	dependencies.Stdin = strings.NewReader("y\n\n\n\n\nn\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config, "--name", "Demo", "--model", "model_a"}, &stdout, &stderr, dependencies)
 	if code != 0 {

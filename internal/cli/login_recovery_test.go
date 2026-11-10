@@ -277,7 +277,7 @@ func TestSetupResumesAfterLoginExpiresWhileEnteringAnswers(t *testing.T) {
 		}
 		return writer.Result(), nil
 	})
-	dependencies.Stdin = strings.NewReader("My saved app\n\n1000\nPlus\n10\nn\ny\n\nn\n")
+	dependencies.Stdin = strings.NewReader("My saved app\n\n1000\nPlus\n10\nn\nn\ny\n\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config}, &stdout, &stderr, dependencies)
 	if code != 0 || opened != 1 || refreshes != 1 || strings.Count(stdout.String(), "App name") != 1 || !strings.Contains(stdout.String(), "Plan saved. No changes applied.") {

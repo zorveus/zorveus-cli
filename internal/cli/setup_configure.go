@@ -42,7 +42,11 @@ func collectSetup(input *setupInput, flags setupOptions) (manifest.SaaSOptions, 
 		return options, err
 	}
 	if len(flags.plans) > 0 {
-		return saasOptions(options.Name, options.Models, options.CreditsPerUSD, flags.plans)
+		options, err = saasOptions(options.Name, options.Models, options.CreditsPerUSD, flags.plans)
+		if err != nil {
+			return options, err
+		}
+		return collectSetupRouting(input, flags, options, defaults.Routing)
 	}
 	// Validate app-level input before starting the plan loop.
 	if _, err := saasOptions(options.Name, options.Models, options.CreditsPerUSD, nil); err != nil {
@@ -72,7 +76,7 @@ func collectSetup(input *setupInput, flags setupOptions) (manifest.SaaSOptions, 
 			return options, err
 		}
 		if !addAnother {
-			return options, nil
+			return collectSetupRouting(input, flags, options, defaults.Routing)
 		}
 		plan, err := collectSetupPlan(input, options)
 		if err != nil {

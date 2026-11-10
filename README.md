@@ -73,7 +73,7 @@ To build or contribute to the CLI, see [Building Zorveus](BUILDING.md).
 
 ## Your first app
 
-To configure customer allowance plans through guided prompts, run `zorveus setup`. The wizard handles sign-in, app and model configuration, one or more plans, review, and apply. See [Set up customer allowance plans](docs/setup.md) for a walkthrough and non-interactive inputs.
+To configure customer allowance plans through guided prompts, run `zorveus setup`. The wizard handles sign-in, app and model configuration, one or more plans, optional routing, review, and apply. A routing key uses the collected plan references as selectors. See [Set up customer allowance plans](docs/setup.md) for a walkthrough and non-interactive inputs.
 
 Follow this path to create an app and learn the main workflow:
 
@@ -430,7 +430,7 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `login`, `whoami`, `logout` | Manage your CLI session |
 | `apps list` | List apps in the selected organization |
 | `init`, `validate` | Create and check a manifest offline |
-| `setup` | Configure customer allowance plans, review, and apply resources |
+| `setup` | Configure customer allowance plans and optional routing, review, and apply resources |
 | `retrieve` | Print a saved secret by manifest reference or resource ID |
 | `plan`, `apply` | Review and apply configuration changes |
 | `import` | Adopt an existing app into a manifest |

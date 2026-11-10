@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,38 @@ func TestSaaSAllowsAllModelsByDefault(t *testing.T) {
 		if err := json.Unmarshal(data, &document); err != nil || len(document.App.AllowedModels) != 1 || document.App.AllowedModels[0] != "*" {
 			t.Fatal("SaaS manifest did not allow all models")
 		}
+	}
+}
+
+func TestSaaSRoutingUsesPlanReferencesAndAllowsChoosingTheDefault(t *testing.T) {
+	options := SaaSOptions{Name: "Demo", CreditsPerUSD: "100", Plans: []SaaSPlan{
+		{Reference: "plus", Name: "Plus", Allowance: "10"},
+		{Reference: "pro", Name: "Pro", Allowance: "30"},
+	}, Routing: &SaaSRouting{DefaultSelector: "pro"}}
+	data, err := SaaS(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := document.Resources("routingKeys")[0]
+	if router.Name != "primary" || router.Fields["name"] != "Demo router" || router.Fields["defaultSelector"] != "pro" || !reflect.DeepEqual(router.Fields["members"], []any{"plus", "pro"}) {
+		t.Fatal("routing did not use the collected plan references")
+	}
+	options.Routing.DefaultSelector = ""
+	data, err = SaaS(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, _ = Parse(data)
+	if document.Resources("routingKeys")[0].Fields["defaultSelector"] != "plus" {
+		t.Fatal("routing did not default to the first collected plan")
+	}
+	options.Routing.DefaultSelector = "missing"
+	if _, err := SaaS(options); err == nil {
+		t.Fatal("routing accepted a default outside its members")
 	}
 }
 

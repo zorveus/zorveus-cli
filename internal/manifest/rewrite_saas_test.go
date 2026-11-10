@@ -53,3 +53,40 @@ func TestRewriteSaaSPreservesIdentitiesAndUnmanagedSettings(t *testing.T) {
 		t.Fatal("building a rewrite mutated the original document")
 	}
 }
+
+func TestRewriteSaaSRoutingPreservesRouterIdentityAndOtherRouters(t *testing.T) {
+	original, err := Parse([]byte(`{
+  "version":1,
+  "app":{"id":"app_a","name":"Demo","allowedModels":["*"]},
+  "keys":{"plus":{"id":"conn_a","name":"Plus"}},
+  "routingKeys":{
+    "primary":{"id":"router_a","name":"Primary","members":["plus"],"defaultSelector":"plus"},
+    "other":{"id":"router_b","name":"Custom","members":["plus"],"defaultSelector":null}
+  }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := SaaSOptions{Name: "Demo", CreditsPerUSD: "100", Plans: []SaaSPlan{
+		{Reference: "plus", Name: "Plus", Allowance: "10"},
+		{Reference: "pro", Name: "Pro", Allowance: "30"},
+	}, Routing: &SaaSRouting{Name: "Plan router", DefaultSelector: "pro"}}
+	data, err := RewriteSaaS(original, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routers := document.data["routingKeys"].(map[string]any)
+	primary := routers["primary"].(map[string]any)
+	if primary["id"] != "router_a" || primary["name"] != "Plan router" || primary["defaultSelector"] != "pro" || len(primary["members"].([]any)) != 2 {
+		t.Fatal("updating the router lost its ID or configured selectors")
+	}
+	before, _ := json.Marshal(original.data["routingKeys"].(map[string]any)["other"])
+	after, _ := json.Marshal(routers["other"])
+	if !bytes.Equal(before, after) {
+		t.Fatal("wizard changed another routing key")
+	}
+}

@@ -49,7 +49,7 @@ func TestExistingSetupCanRewriteWithDefaultsAndBackup(t *testing.T) {
 	config := existingDraft(t)
 	before, _ := os.ReadFile(config)
 	dependencies := wizardDependencies(t)
-	dependencies.Stdin = strings.NewReader("n\ny\nUpdated room\n\n\nPremium\n25\nn\ny\nn\n")
+	dependencies.Stdin = strings.NewReader("n\ny\nUpdated room\n\n\nPremium\n25\nn\nn\ny\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config}, &stdout, &stderr, dependencies)
 	if code != 0 {
@@ -80,7 +80,7 @@ func TestCancelingRewriteKeepsOriginalFileWithoutBackup(t *testing.T) {
 	config := existingDraft(t)
 	before, _ := os.ReadFile(config)
 	dependencies := wizardDependencies(t)
-	dependencies.Stdin = strings.NewReader("n\ny\n" + strings.Repeat("\n", 5) + "n\nn\n")
+	dependencies.Stdin = strings.NewReader("n\ny\n" + strings.Repeat("\n", 5) + "n\nn\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config}, &stdout, &stderr, dependencies)
 	if code != 0 {

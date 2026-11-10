@@ -33,7 +33,7 @@ func TestWizardColorsRespectOutputAndOptOuts(t *testing.T) {
 			dependencies := wizardDependencies(t)
 			dependencies.OutputIsTerminal = test.terminal
 			dependencies.ErrorIsTerminal = test.terminal
-			dependencies.Stdin = strings.NewReader("\n\n\n\n\ny\nn\n")
+			dependencies.Stdin = strings.NewReader("\n\n\n\n\nn\ny\nn\n")
 			arguments := []string{"setup", "--config", filepath.Join(t.TempDir(), "zorveus.json"), "--name", "Show room"}
 			if test.noColorFlag {
 				arguments = append(arguments, "--no-color")
@@ -118,7 +118,7 @@ func TestWizardPresentationPreview(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	dependencies := wizardDependencies(t)
 	dependencies.OutputIsTerminal = true
-	dependencies.Stdin = terminalAnswers{input: strings.NewReader("Show room\n\n1000\n\n\n\ny\nn\n"), output: &stdout}
+	dependencies.Stdin = terminalAnswers{input: strings.NewReader("Show room\n\n1000\n\n\n\nn\ny\nn\n"), output: &stdout}
 	code := Execute(context.Background(), []string{"setup"}, &stdout, &stderr, dependencies)
 	if code != 0 {
 		t.Fatalf("wizard preview: %d %s", code, stderr.String())

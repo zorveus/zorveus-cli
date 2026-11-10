@@ -1,6 +1,6 @@
 # Set up customer allowance plans
 
-Use `zorveus setup` to configure an app, set its model permissions, define customer allowance plans, review the proposed resources, and apply them. Setup ends after provisioning completes.
+Use `zorveus setup` to configure an app, set its model permissions, define customer allowance plans, optionally add a routing key, and review and apply the resources. Setup ends after provisioning completes.
 
 You need a Zorveus account and an available OS credential store. Your organization needs access to your chosen model and enough funding for inference. Setup creates configuration and credentials. It does not purchase credits or send an inference request.
 
@@ -24,12 +24,31 @@ The wizard asks for:
 2. Model permissions. Press Enter to use `"*"`, which allows all models. Enter model IDs separated by commas to restrict access instead. The wizard does not discover or verify available models.
 3. Credit units per USD. The default is `100`, shared by every plan.
 4. A plan display name and a monthly AI allowance in USD per customer.
+5. Whether to create a routing key. The default is no.
 
 The first plan defaults to `Plus`, reference `plus`, with a `10` USD allowance. At `100` credit units per USD, that allowance equals `1,000` credits per customer each month. Answer yes to **Add another plan?** to configure more plans in the same session. Press Enter to continue with your current plans.
 
 Questions use cyan, completed steps use green, and warnings use amber. Defaults and hints use muted text. Colors follow your terminal's palette. Use `--no-color` or set `NO_COLOR=1` to disable them. Redirected output, `TERM=dumb`, and JSON output contain no color escape sequences.
 
 The wizard generates each plan's JSON key from its display name, such as `Plus` to `plus`. It asks for a JSON key only if the generated key is already used or the name cannot be converted. Use lowercase letters, digits, underscores, or hyphens. Keep this key stable when editing the display name later. It identifies the inference key in your manifest; it does not require or create a routing key.
+
+Answer yes to **Create a routing key?** to include all collected plans. Their existing references become selectors, so plans `plus` and `pro` use selectors `plus` and `pro`. Setup asks for a routing-key display name and a default selector. Press Enter to use the first plan as the default, or enter another listed reference.
+
+For example, choosing `pro` as the default adds this block to your manifest:
+
+```json
+{
+  "routingKeys": {
+    "primary": {
+      "name": "My app router",
+      "members": ["plus", "pro"],
+      "defaultSelector": "pro"
+    }
+  }
+}
+```
+
+During apply, the CLI resolves those references to the created inference-key IDs, then creates the routing key. After apply, retrieve its secret with `zorveus retrieve routingKeys.primary`.
 
 An AI allowance is different from your subscription price. Your application and payment provider manage subscriptions, payments, and customer plan assignments. The selected inference key supplies the AI policy. Switching keys does not promise a reset of the customer's existing usage.
 
@@ -42,8 +61,9 @@ For a new app, the plan includes:
 - One app permitting all models by default, or your specified model, with the chosen credit conversion rate.
 - One direct inference connection per plan, with its monthly allowance, `creditMode: "enforce"`, and `overrunPolicy: "limit_output"`.
 - One shared organization service key under `serviceKeys.customers`, with `product_users:read` for customer reads.
+- If requested, one routing key under `routingKeys.primary`, using all plan references as its members.
 
-Enforcement and output limiting follow the backend's existing behavior. The wizard does not add routing keys, provider credentials, or payment-provider configuration.
+Enforcement and output limiting follow the backend's existing behavior. The wizard does not add provider credentials or payment-provider configuration.
 
 Apply creates the resources, writes their IDs into your local manifest, and saves generated secrets in the OS credential store. Secrets stay out of manifests, plans, journals, and setup output. Use `retrieve` to print one saved value explicitly.
 
@@ -57,7 +77,9 @@ Setup displays the existing file, app name and ID, model permissions, credit con
 
 Answer no to choose **Rewrite this configuration?**. Answer yes to edit the app settings and each plan through the wizard, with current values as defaults. Existing app and matched resource IDs stay intact. Changing a plan's display name keeps its JSON key. You can add more plans in the same session.
 
-Rewrite preserves settings outside the wizard, including OAuth, routing, provider credentials, and existing organization service keys. The current file is backed up under `.zorveus/setup-backup-*` only after you approve saving the rewrite. You then review and approve the remote changes separately. Canceling either question keeps the existing file. Creation flags such as `--name` and `--plan` do not silently overwrite existing files; non-interactive updates can be made by editing the manifest and running plan/apply.
+If `routingKeys.primary` already exists, rewrite asks **Update routing key to include all plans?**. The default is no, which keeps that router unchanged. Answer yes to include all the collected plans, edit its display name or default selector, and keep its existing ID. Other routing keys remain unchanged.
+
+Rewrite preserves settings outside the wizard, including OAuth, provider credentials, and existing organization service keys. The current file is backed up under `.zorveus/setup-backup-*` only after you approve saving the rewrite. You then review and approve the remote changes separately. Canceling either question keeps the existing file. Creation flags such as `--name` and `--plan` do not silently overwrite existing files; non-interactive updates can be made by editing the manifest and running plan/apply.
 
 Setup checks local tracking before asking for app or plan details. If it conflicts with your configuration, setup looks for applied configurations in the same folder and selected organization and API. It identifies them by their saved app IDs.
 
@@ -136,6 +158,8 @@ zorveus setup --non-interactive \
 ```
 
 This saves a manifest and plan without applying them. Add `--yes` to approve apply. You must already be logged in; non-interactive setup cannot open browser consent. Missing required inputs produce an error before creating a manifest. Omit `--plan` to use the default Plus plan. Omit `--model` to allow all models, or pass `--model YOUR_MODEL_ID` to restrict access. With `--config`, the saved plan follows the manifest name, such as `zorveus.dev.plan.json`.
+
+To include routing, add `--routing-key`. Use `--default-selector premium` to choose the `premium` plan as its default. Without that flag, routing defaults to the first supplied plan. Both options apply to new configurations; edit an existing manifest and use plan/apply for non-interactive updates.
 
 Each `--plan` has the form `reference=Display name:monthly USD allowance`. The allowance and credit conversion are positive decimal strings. Calculations preserve decimal precision.
 

@@ -95,7 +95,7 @@ func TestSetupAppliesThenRetrievesSecretsWithoutMoreWrites(t *testing.T) {
 		return writer.Result(), nil
 	})
 	config := filepath.Join(t.TempDir(), "zorveus.existing.json")
-	dependencies.Stdin = strings.NewReader("\n\n\n\ny\ny\n")
+	dependencies.Stdin = strings.NewReader("\n\n\n\nn\ny\ny\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--name", "Demo", "--model", "model_a", "--config", config}, &stdout, &stderr, dependencies)
 	if code != 0 || writes != 4 {
@@ -177,7 +177,7 @@ func TestSetupAppliesThenRetrievesSecretsWithoutMoreWrites(t *testing.T) {
 	if code != 0 || writes != 4 || stdout.String() != "private-inference\n" || stderr.Len() != 0 {
 		t.Fatalf("restored setup lost its saved secret: code=%d diagnostics=%s", code, stderr.String())
 	}
-	dependencies.Stdin = strings.NewReader("n\ny\n\n\n\nPremium\n30\nn\ny\ny\n")
+	dependencies.Stdin = strings.NewReader("n\ny\n\n\n\nPremium\n30\nn\nn\ny\ny\n")
 	stdout.Reset()
 	stderr.Reset()
 	code = Execute(context.Background(), []string{"setup", "--config", defaultConfig}, &stdout, &stderr, dependencies)

@@ -39,5 +39,20 @@ func RewriteSaaS(original *Document, options SaaSOptions) ([]byte, error) {
 		services["customers"] = source.data["serviceKeys"].(map[string]any)["customers"]
 	}
 	target.data["serviceKeys"] = services
+	if options.Routing != nil {
+		routers, _ := target.data["routingKeys"].(map[string]any)
+		if routers == nil {
+			routers = map[string]any{}
+		}
+		primary, _ := routers["primary"].(map[string]any)
+		if primary == nil {
+			primary = map[string]any{}
+		}
+		// Keep the existing router ID while updating its name and plan selectors.
+		configured := source.data["routingKeys"].(map[string]any)["primary"].(map[string]any)
+		mergePromotionFields(configured, primary, false)
+		routers["primary"] = primary
+		target.data["routingKeys"] = routers
+	}
 	return encodeAndValidate(target.data)
 }

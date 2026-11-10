@@ -25,8 +25,8 @@ func TestWizardAndOfflineInputsProduceTheSameManifest(t *testing.T) {
 		name, input string
 		plans       []string
 	}{
-		{"one plan", "\n\n\n\n", nil},
-		{"several plans", "\n\n\ny\nPremium\n30\n\n", []string{"plus=Plus:10", "premium=Premium:30"}},
+		{"one plan", "\n\n\n\nn\n", nil},
+		{"several plans", "\n\n\ny\nPremium\n30\n\nn\n", []string{"plus=Plus:10", "premium=Premium:30"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
@@ -81,7 +81,7 @@ func wizardDependencies(t *testing.T) Dependencies {
 }
 
 func TestSetupDeclineAndCancellationLeaveNoPartialManifest(t *testing.T) {
-	for _, answer := range []string{"\n\n\n\nn\n", ""} {
+	for _, answer := range []string{"\n\n\n\nn\nn\n", ""} {
 		config := filepath.Join(t.TempDir(), "zorveus.json")
 		dependencies := wizardDependencies(t)
 		dependencies.Stdin = strings.NewReader(answer)
@@ -99,7 +99,7 @@ func TestSetupDeclineAndCancellationLeaveNoPartialManifest(t *testing.T) {
 func TestSetupShowsTheCompletePlanBeforeApproval(t *testing.T) {
 	config := filepath.Join(t.TempDir(), "zorveus.dev.json")
 	dependencies := wizardDependencies(t)
-	dependencies.Stdin = strings.NewReader("\n\n\n\ny\nn\n")
+	dependencies.Stdin = strings.NewReader("\n\n\n\nn\ny\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config, "--name", "Demo", "--model", "model_a"}, &stdout, &stderr, dependencies)
 	if code != 0 {
@@ -161,7 +161,7 @@ func TestSetupNonInteractiveWritesOneJSONResultAndDoesNotApplyWithoutYes(t *test
 
 func TestWizardDefaultsToAllModels(t *testing.T) {
 	var output bytes.Buffer
-	input := setupInput{ctx: context.Background(), reader: bufio.NewReader(strings.NewReader("\n\n\n\n\n")), output: &output}
+	input := setupInput{ctx: context.Background(), reader: bufio.NewReader(strings.NewReader("\n\n\n\n\nn\n")), output: &output}
 	options, err := collectSetup(&input, setupOptions{name: "Demo", credits: "100"})
 	if err != nil || (len(options.Models) != 1 || options.Models[0] != "*") {
 		t.Fatalf("wizard default: %+v %v", options, err)

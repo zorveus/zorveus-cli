@@ -20,6 +20,8 @@ type setupOptions struct {
 	config, name, credits string
 	models, plans         []string
 	accepted, allowDelete bool
+	routingKey            bool
+	defaultSelector       string
 	defaults              *manifest.SaaSOptions
 }
 
@@ -33,7 +35,7 @@ type setupResult struct {
 func setupCommand(settings *flags, dependencies Dependencies, stdout, stderr io.Writer) *cobra.Command {
 	options := setupOptions{}
 	command := &cobra.Command{
-		Use: "setup", Short: "Set up an app and customer allowance plans with guided review",
+		Use: "setup", Short: "Configure an app, allowance plans, and optional routing with guided review",
 		Args:              noArguments,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(command *cobra.Command, arguments []string) error {
@@ -47,10 +49,15 @@ func setupCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 	command.Flags().StringArrayVar(&options.plans, "plan", nil, "reference=Display name:monthly USD allowance; repeat for more plans")
 	command.Flags().BoolVar(&options.accepted, "yes", false, "Apply the reviewed configuration without another confirmation")
 	command.Flags().BoolVar(&options.allowDelete, "allow-delete", false, "Also allow reviewed revocations and removals")
+	command.Flags().BoolVar(&options.routingKey, "routing-key", false, "Include a routing key with every plan as a member")
+	command.Flags().StringVar(&options.defaultSelector, "default-selector", "", "Default plan reference with --routing-key; defaults to the first plan")
 	return command
 }
 
 func runSetup(command *cobra.Command, settings *flags, dependencies Dependencies, options setupOptions, stdout, stderr io.Writer) error {
+	if options.defaultSelector != "" && !options.routingKey {
+		return problem.New("invalid_arguments", "Use --routing-key with --default-selector.", 2)
+	}
 	interactive := dependencies.InputIsTerminal && !settings.nonInteractive
 	if interactive && settings.jsonOutput {
 		return problem.New("interactive_json_unsupported", "Use --non-interactive with explicit setup inputs for --json output.", 2)
@@ -64,7 +71,7 @@ func runSetup(command *cobra.Command, settings *flags, dependencies Dependencies
 		if _, err := manifest.Load(options.config); err != nil {
 			return err
 		}
-		if options.name != "" || len(options.plans) > 0 || command.Flags().Changed("credits-per-usd") || command.Flags().Changed("model") {
+		if options.name != "" || len(options.plans) > 0 || command.Flags().Changed("credits-per-usd") || command.Flags().Changed("model") || options.routingKey {
 			return problem.New("config_exists", "Setup preserves existing manifests. Edit their settings, then run setup again to review and apply the changes.", 2)
 		}
 	}
@@ -73,6 +80,12 @@ func runSetup(command *cobra.Command, settings *flags, dependencies Dependencies
 		configuration, err = saasOptions(options.name, options.models, options.credits, options.plans)
 		if err != nil {
 			return err
+		}
+		if options.routingKey {
+			configuration.Routing = &manifest.SaaSRouting{DefaultSelector: options.defaultSelector}
+			if _, err := manifest.SaaS(configuration); err != nil {
+				return err
+			}
 		}
 	}
 	progress := stdout
