@@ -20,6 +20,13 @@ curl -fsSL https://zorveus.com/install.sh | sh
 
 The installer detects macOS or Linux and selects the x86-64 or ARM64 binary. It verifies the download's SHA-256 checksum and installs `zorveus` into `~/.local/bin` without `sudo`. Linux binaries are built without cgo, so the installer does not depend on a distribution's package manager or choice of glibc or musl.
 
+It also configures completion for your login shell when it is zsh, bash, or fish. Open a new terminal after installation. Use `--shell zsh` to select a shell explicitly, or `--no-completion` to skip shell configuration:
+
+```sh
+curl -fsSL https://zorveus.com/install.sh | sh -s -- --shell zsh
+curl -fsSL https://zorveus.com/install.sh | sh -s -- --no-completion
+```
+
 You need `curl`, CA certificates, and either `sha256sum` or `shasum`. Other operating systems and processor architectures are not supported by the shell installer.
 
 If `zorveus` is not found after installation, add its directory to your current shell:
@@ -39,7 +46,7 @@ sh install-zorveus.sh --help
 sh install-zorveus.sh --version v1.2.3 --bin-dir "$HOME/.local/bin"
 ```
 
-Replace `v1.2.3` with the release you want to install. A failed download or checksum check leaves your current executable untouched. The installer does not modify your shell configuration or saved login.
+Replace `v1.2.3` with the release you want to install. A failed download or checksum check leaves your current executable untouched. Completion setup appends a marked loader to shell startup files while preserving their existing contents. Reinstalling refreshes the completion script without duplicating the loader. Your saved login is preserved.
 
 ### Windows
 
@@ -406,7 +413,19 @@ The CLI saves the dashboard URL for sign-in recovery. If an older login uses a c
 
 ## Shell completion
 
-Load zsh completion in your current terminal:
+The macOS/Linux installer configures completion for the shell named by `$SHELL`. Because the installer runs in a child process, open a new terminal to load it. You can then type `zorveus ` and press Tab to list commands.
+
+| Shell | Installer configuration |
+| --- | --- |
+| zsh | Saves `~/.local/share/zorveus/completions/zorveus.zsh` and adds a loader to `~/.zshrc` |
+| bash | Saves `~/.local/share/bash-completion/completions/zorveus` and adds a loader to `.bashrc` and the active login startup file |
+| fish | Saves `~/.config/fish/completions/zorveus.fish`, which fish loads automatically |
+
+The installer respects `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `ZDOTDIR` when set.
+
+Bash requires the `bash-completion` package. The loader uses it when already enabled or loads it from a standard system or Homebrew location. The installer does not install this package.
+
+For zsh, you can enable completion in your current terminal immediately:
 
 ```zsh
 autoload -Uz compinit
@@ -414,7 +433,7 @@ compinit
 source <(zorveus completion zsh)
 ```
 
-For future terminals, add the `source` line to `~/.zshrc` after your shell's completion setup. If your shell already runs `compinit`, keep its existing setup. Bash, fish, and PowerShell are also supported:
+If you installed manually, add the `source` line to `~/.zshrc` after your shell's completion setup. If your shell already runs `compinit`, keep its existing setup. Bash, fish, and PowerShell are also supported:
 
 ```sh
 zorveus completion --help

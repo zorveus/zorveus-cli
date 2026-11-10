@@ -87,6 +87,28 @@ print(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + str(path))
         path.write_text(content)
         path.chmod(0o755)
 
+    def enable_completion_fixture(self, shell):
+        self.environment["SHELL"] = "/bin/" + shell
+        self.environment["TEST_COMPLETION_LOG"] = str(self.root / "completion.log")
+        self.payload = b'''#!/bin/sh
+[ "$1" = completion ] || exit 1
+printf '%s\\n' "$2" >> "$TEST_COMPLETION_LOG"
+[ "${TEST_FAIL_COMPLETION:-}" != yes ] || exit 1
+case "$2" in
+  zsh) printf '%s\\n' '#compdef zorveus' '_zorveus() { return 0; }' 'compdef _zorveus zorveus' ;;
+  bash) printf '%s\\n' 'complete -W "login logout" zorveus' ;;
+  fish) printf '%s\\n' 'complete -c zorveus -f -a "login logout"' ;;
+  *) exit 1 ;;
+esac
+'''
+        checksum = hashlib.sha256(self.payload).hexdigest()
+        artifacts = [f"zorveus-{system}-{arch}" for system in ["linux", "darwin"]
+                     for arch in ["amd64", "arm64"]]
+        for name in artifacts:
+            (self.fixtures / name).write_bytes(self.payload)
+        (self.fixtures / "SHA256SUMS").write_text(
+            "".join(f"{checksum}  {name}\n" for name in artifacts))
+
     def run_installer(self, *arguments, succeeds=True):
         result = subprocess.run(["/bin/sh", str(INSTALLER), *arguments],
                                 env=self.environment, capture_output=True, text=True)
@@ -96,6 +118,8 @@ print(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + str(path))
             self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertEqual(list(self.downloads.iterdir()), [], "temporary downloads remain")
         self.assertEqual(list(self.home.rglob(".zorveus.*")), [], "staged binary remains")
+        self.assertEqual(list(self.home.rglob(".zorveus-completion.*")), [],
+                         "staged completion remains")
         return result
 
     def request_log(self):
@@ -172,6 +196,8 @@ print(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + str(path))
             ("Linux", "x86_64", ["--version"]),
             ("Linux", "x86_64", ["--bin-dir", "relative/path"]),
             ("Linux", "x86_64", ["--unexpected"]),
+            ("Linux", "x86_64", ["--shell"]),
+            ("Linux", "x86_64", ["--shell", "unsupported"]),
         ]:
             with self.subTest(system=system, arch=arch, arguments=arguments):
                 self.environment.update(TEST_OS=system, TEST_ARCH=arch)
@@ -189,6 +215,107 @@ print(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + str(path))
         result = self.run_installer("--help")
         self.assertIn("--bin-dir", result.stdout)
         self.assertEqual(self.request_log(), "")
+
+    def test_zsh_completion_preserves_startup_file_and_does_not_duplicate(self):
+        self.enable_completion_fixture("zsh")
+        startup = self.home / ".zshrc"
+        original = "# My shell settings\nexport MY_SETTING=kept\n"
+        startup.write_text(original)
+        self.run_installer()
+        self.run_installer()
+        content = startup.read_text()
+        self.assertTrue(content.startswith(original))
+        self.assertEqual(content.count("# >>> Zorveus completion >>>"), 1)
+        completion = self.home / ".local/share/zorveus/completions/zorveus.zsh"
+        self.assertIn("compdef _zorveus zorveus", completion.read_text())
+        zsh = shutil.which("zsh")
+        if zsh:
+            environment = self.environment | {"PATH": os.defpath}
+            result = subprocess.run([zsh, "-fc", '. "$HOME/.zshrc"; print -r -- "${_comps[zorveus]}"'],
+                                    env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "_zorveus")
+
+    def test_completion_is_configured_when_installer_is_piped_to_sh(self):
+        self.enable_completion_fixture("zsh")
+        result = subprocess.run(["/bin/sh"], input=INSTALLER.read_text(),
+                                env=self.environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Completion configured for zsh", result.stdout)
+        self.assertIn("# >>> Zorveus completion >>>", (self.home / ".zshrc").read_text())
+
+    def test_completion_respects_custom_directories_and_startup_symlinks(self):
+        self.enable_completion_fixture("zsh")
+        zsh_directory = self.home / "shell's config"
+        zsh_directory.mkdir()
+        existing = self.home / "existing-shell-config"
+        existing.write_text("# Existing config\n")
+        startup = zsh_directory / ".zshrc"
+        startup.symlink_to(existing)
+        data_directory = self.home / "data's $(literal)"
+        self.environment.update(ZDOTDIR=str(zsh_directory), XDG_DATA_HOME=str(data_directory))
+        self.run_installer()
+        self.assertTrue(startup.is_symlink())
+        self.assertTrue(existing.read_text().startswith("# Existing config\n"))
+        self.assertIn("# >>> Zorveus completion >>>", existing.read_text())
+        self.assertTrue((data_directory / "zorveus/completions/zorveus.zsh").is_file())
+        self.assertFalse((self.home / ".zshrc").exists())
+
+    def test_bash_completion_registers_login_and_interactive_shells(self):
+        self.enable_completion_fixture("bash")
+        profile = self.home / ".profile"
+        profile.write_text("# Existing login config\n")
+        self.run_installer()
+        self.run_installer()
+        for startup in [profile, self.home / ".bashrc"]:
+            self.assertEqual(startup.read_text().count("# >>> Zorveus completion >>>"), 1)
+        self.assertFalse((self.home / ".bash_profile").exists())
+        self.assertTrue((self.home / ".local/share/bash-completion/completions/zorveus").is_file())
+        bash = shutil.which("bash")
+        if bash:
+            # Stand in for an already-loaded bash-completion package.
+            script = '_get_comp_words_by_ref() { :; }; . "$HOME/.bashrc"; complete -p zorveus'
+            result = subprocess.run([bash, "--noprofile", "--norc", "-c", script],
+                                    env=self.environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("zorveus", result.stdout)
+
+    def test_fish_uses_its_completion_directory_without_startup_edits(self):
+        self.enable_completion_fixture("fish")
+        config_directory = self.home / "custom config"
+        self.environment["XDG_CONFIG_HOME"] = str(config_directory)
+        self.run_installer()
+        completion = config_directory / "fish/completions/zorveus.fish"
+        self.assertIn("complete -c zorveus", completion.read_text())
+        self.assertFalse((config_directory / "fish/config.fish").exists())
+        self.assertFalse((self.home / ".zshrc").exists())
+
+    def test_completion_can_be_disabled_or_shell_overridden(self):
+        self.enable_completion_fixture("zsh")
+        self.run_installer("--no-completion")
+        self.assertFalse((self.home / ".zshrc").exists())
+        self.assertFalse((self.root / "completion.log").exists())
+        self.run_installer("--shell", "fish")
+        self.assertTrue((self.home / ".config/fish/completions/zorveus.fish").is_file())
+        self.assertFalse((self.home / ".zshrc").exists())
+
+    def test_completion_failure_keeps_binary_and_existing_configuration(self):
+        self.enable_completion_fixture("zsh")
+        startup = self.home / ".zshrc"
+        original = "# Existing settings\n"
+        startup.write_text(original)
+        self.environment["TEST_FAIL_COMPLETION"] = "yes"
+        result = self.run_installer()
+        self.assertIn("shell completion was not configured", result.stderr)
+        self.assertEqual(startup.read_text(), original)
+        self.assertEqual((self.home / ".local/bin/zorveus").read_bytes(), self.payload)
+
+    def test_invalid_download_is_never_executed_for_completion(self):
+        self.enable_completion_fixture("zsh")
+        (self.fixtures / "zorveus-linux-amd64").write_bytes(b"unverified executable")
+        self.run_installer(succeeds=False)
+        self.assertFalse((self.root / "completion.log").exists())
+        self.assertFalse((self.home / ".zshrc").exists())
 
 
 if __name__ == "__main__":

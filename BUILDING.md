@@ -54,7 +54,7 @@ Unit tests use injected credential stores and local HTTP servers. They do not ne
 
 MCP tests exercise SDK client/server sessions and the CLI's stdio transport. They verify discovery, account inspection, manifest creation and copying, import, service-key revocation, saved-plan apply, retry behavior, and exclusion of credentials from responses and logs. The adapter is in `internal/mcpserver`; terminal registration is in `internal/cli/mcp.go`.
 
-Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, and cleanup.
+Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, cleanup, and shell completion setup. Completion tests use an executable fixture and temporary home directories. They check startup-file preservation, repeat installs, custom configuration paths, opt-out, and shell registration without changing your real shell configuration.
 
 The `internal/selfupdate` tests simulate HTTPS release responses and replace temporary executables. One test launches a temporary copy of the test binary and updates that running copy. These tests never update your installed CLI or download a release. The release workflow runs them on macOS, Linux, and Windows before publishing.
 
