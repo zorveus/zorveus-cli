@@ -834,3 +834,15 @@ func TestDecimalComparisonAndSecretErrors(t *testing.T) {
 		t.Fatal("store error treated as a missing credential")
 	}
 }
+
+func (store *loginStore) Read() (auth.SavedLogins, error) {
+	login, err := store.Load()
+	return auth.SavedLogins{Version: 1, Logins: []auth.Login{login}, Default: auth.LoginReference{APIOrigin: login.APIOrigin, Organization: login.Organization}}, err
+}
+
+func (store *loginStore) Write(saved auth.SavedLogins) error {
+	if len(saved.Logins) == 0 {
+		return store.Delete()
+	}
+	return store.Save(saved.Logins[len(saved.Logins)-1])
+}

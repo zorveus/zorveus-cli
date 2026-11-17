@@ -54,7 +54,7 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 	if err != nil {
 		return ImportResult{}, err
 	}
-	document := fields(map[string]any{"version": 1, "app": importedApp(app), "keys": map[string]Fields{}, "routingKeys": map[string]Fields{}})
+	document := fields(map[string]any{"version": 1, "organizationId": remote.target.Org, "app": importedApp(app), "keys": map[string]Fields{}, "routingKeys": map[string]Fields{}})
 	importedKeys := map[string]Fields{}
 	state := State{Version: 1, Target: remote.target, AppID: appID, Keys: map[string]string{}, Routers: []string{}}
 	for _, key := range keys {

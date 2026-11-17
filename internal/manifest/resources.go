@@ -18,6 +18,11 @@ func (document *Document) AppID() string {
 	return document.view.App.ID
 }
 
+func (document *Document) OrganizationID() string {
+	organization, _ := document.data["organizationId"].(string)
+	return organization
+}
+
 func (document *Document) Version() int {
 	version, _ := document.data["version"].(json.Number)
 	value, _ := version.Float64()

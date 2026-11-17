@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/problem"
@@ -13,10 +14,42 @@ func (service *Service) loginForOperation(ctx context.Context, target LoginTarge
 	if err != nil {
 		return Login{}, nil, err
 	}
-	login, err := service.loadLogin(target.APIOrigin)
+	login, err := service.loadLogin(ctx, target)
 	if err != nil {
+		if service.RequestLogin == nil || ctx.Err() != nil || !missingLogin(err) {
+			unlock()
+			return Login{}, nil, err
+		}
+		organization := target.Organization
+		if organization == "" {
+			organization = service.Organization
+		}
+		options := LoginOptions{
+			APIOrigin: target.APIOrigin, ExpectedOrganization: organization,
+		}
+		saved, err := service.Store.Read()
+		if err != nil && !errors.Is(err, ErrNoLogin) {
+			unlock()
+			return Login{}, nil, err
+		}
+		if options.APIOrigin == "" {
+			// Reuse the configured environment when only this organization's login is missing.
+			environmentLogin, found := saved.find(saved.Default)
+			if !found && len(saved.Logins) == 1 {
+				environmentLogin, found = saved.Logins[0], true
+			}
+			if found {
+				options.APIOrigin = environmentLogin.APIOrigin
+				options.DashboardOrigin = environmentLogin.DashboardOrigin
+			}
+		}
+		options.SignInMessage = "Sign in to continue."
+		if organization != "" {
+			cached, _ := saved.find(LoginReference{APIOrigin: options.APIOrigin, Organization: organization})
+			options.SignInMessage = "Sign in to organization " + OrganizationLabel(cached.OrganizationName, organization) + " to continue."
+		}
 		unlock()
-		return Login{}, nil, err
+		return service.signInForOperation(ctx, target, scopes, options)
 	}
 	if err := requireOrganization(login, target.Organization); err != nil {
 		unlock()
@@ -40,25 +73,44 @@ func (service *Service) loginForOperation(ctx context.Context, target LoginTarge
 	if service.RequestLogin == nil || ctx.Err() != nil || !canRecoverRenewal(err) {
 		return Login{}, nil, err
 	}
-	err = service.RequestLogin(ctx, LoginOptions{
+	return service.signInForOperation(ctx, target, scopes, LoginOptions{
 		APIOrigin: login.APIOrigin, DashboardOrigin: login.DashboardOrigin, Scope: login.Scope,
-		ExpectedOrganization: login.Organization, ExpectedUser: target.UserID,
+		SignInMessage: "Your session for " + OrganizationLabel(login.OrganizationName, login.Organization) + " could not be renewed. Sign in again to continue.",
 	})
+}
+
+func missingLogin(err error) bool {
+	return errors.Is(err, ErrNoLogin) || problem.Safe(err).Code == "login_required"
+}
+
+func (service *Service) signInForOperation(ctx context.Context, target LoginTarget, scopes []string, options LoginOptions) (Login, func(), error) {
+	recovered, err := service.RequestLogin(ctx, options)
 	if err != nil {
 		return Login{}, nil, err
 	}
+	if options.APIOrigin != "" && recovered.APIOrigin != options.APIOrigin {
+		return Login{}, nil, loginTargetChanged()
+	}
+	if target.Organization != "" && recovered.Organization != target.Organization {
+		return Login{}, nil, loginTargetChanged()
+	}
+	if service.Organization != "" && recovered.Organization != service.Organization {
+		return Login{}, nil, loginTargetChanged()
+	}
+	target.APIOrigin = recovered.APIOrigin
+	target.Organization = recovered.Organization
 
 	// Read the saved replacement once. Never restart the command or replay a write.
-	unlock, err = service.Lock(ctx)
+	unlock, err := service.Lock(ctx)
 	if err != nil {
 		return Login{}, nil, err
 	}
-	current, err = service.loadLogin(login.APIOrigin)
+	current, err := service.loadLogin(ctx, target)
 	if err != nil {
 		unlock()
 		return Login{}, nil, err
 	}
-	if err := requireOrganization(current, login.Organization); err != nil {
+	if err := requireOrganization(current, target.Organization); err != nil {
 		unlock()
 		return Login{}, nil, err
 	}
@@ -116,5 +168,5 @@ func (service *Service) loginUser(ctx context.Context, login Login) (string, err
 }
 
 func loginTargetChanged() error {
-	return problem.New("target_mismatch", "Sign in with the same organization and user to continue this operation.", 4)
+	return problem.New("target_mismatch", "This operation belongs to another organization or user. Your saved logins were kept. Use the original organization and user to resume it, or run plan for a different project.", 4)
 }

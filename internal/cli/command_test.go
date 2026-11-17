@@ -218,6 +218,7 @@ func TestLoginUsesEnvironmentDefaultsAndExplicitOverrides(t *testing.T) {
 			store := &testStore{}
 			dependencies := testDependencies(store)
 			dependencies.InputIsTerminal = true
+			dependencies.Stdin = strings.NewReader("\n")
 			dependencies.Auth.API.HTTP.Transport = requestHandler(func(request *http.Request) (*http.Response, error) {
 				if request.URL.Scheme+"://"+request.URL.Host != test.api {
 					t.Error("token exchange used the wrong API origin")
@@ -322,4 +323,16 @@ func TestGeneratedZshCompletionIsValidShellSource(t *testing.T) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("zsh could not parse the completion script: %v\n%s", err, output)
 	}
+}
+
+func (store *testStore) Read() (auth.SavedLogins, error) {
+	login, err := store.Load()
+	return auth.SavedLogins{Version: 1, Logins: []auth.Login{login}, Default: auth.LoginReference{APIOrigin: login.APIOrigin, Organization: login.Organization}}, err
+}
+
+func (store *testStore) Write(saved auth.SavedLogins) error {
+	if len(saved.Logins) == 0 {
+		return store.Delete()
+	}
+	return store.Save(saved.Logins[len(saved.Logins)-1])
 }

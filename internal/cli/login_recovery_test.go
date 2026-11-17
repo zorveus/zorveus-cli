@@ -121,12 +121,16 @@ func TestRecoveryStopsBeforeOpeningBrowserWhenInputCloses(t *testing.T) {
 }
 
 func approveRecoveryLogin(t *testing.T, address string) {
+	approveLoginOnDashboard(t, address, "localhost:3000")
+}
+
+func approveLoginOnDashboard(t *testing.T, address, dashboardHost string) {
 	t.Helper()
 	authorization, err := url.Parse(address)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if authorization.Host != "localhost:3000" {
+	if authorization.Host != dashboardHost {
 		t.Fatalf("login opened the wrong dashboard: %s", authorization.Host)
 	}
 	callback, err := url.Parse(authorization.Query().Get("redirect_uri"))
@@ -157,7 +161,7 @@ func TestInteractiveCommandsRecoverLoginAndKeepJSONOutputClean(t *testing.T) {
 			}}
 			dependencies := testDependencies(store)
 			dependencies.InputIsTerminal = true
-			dependencies.Stdin = strings.NewReader("\n")
+			dependencies.Stdin = strings.NewReader("\n\n")
 			opened, refreshes, exchanges, reads := 0, 0, 0, 0
 			dependencies.OpenBrowser = func(_ context.Context, address string) error {
 				opened++
@@ -277,7 +281,7 @@ func TestSetupResumesAfterLoginExpiresWhileEnteringAnswers(t *testing.T) {
 		}
 		return writer.Result(), nil
 	})
-	dependencies.Stdin = strings.NewReader("My saved app\n\n1000\nPlus\n10\nn\nn\ny\n\nn\n")
+	dependencies.Stdin = strings.NewReader("My saved app\n\n1000\nPlus\n10\nn\nn\ny\n\n\nn\n")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"setup", "--config", config}, &stdout, &stderr, dependencies)
 	if code != 0 || opened != 1 || refreshes != 1 || strings.Count(stdout.String(), "App name") != 1 || !strings.Contains(stdout.String(), "Plan saved. No changes applied.") {

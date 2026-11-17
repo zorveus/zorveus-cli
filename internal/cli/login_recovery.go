@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -11,8 +12,27 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
-func loginRecovery(settings *flags, dependencies Dependencies, input io.Reader, stderr io.Writer) func(context.Context, auth.LoginOptions) error {
-	return func(ctx context.Context, options auth.LoginOptions) error {
+func loginRecovery(settings *flags, dependencies Dependencies, input io.Reader, stderr io.Writer) func(context.Context, auth.LoginOptions) (auth.LoginSummary, error) {
+	return func(ctx context.Context, options auth.LoginOptions) (auth.LoginSummary, error) {
+		ui := terminalUI{output: stderr, color: terminalColors(settings, dependencies.ErrorIsTerminal)}
+		message := options.SignInMessage
+		if message == "" {
+			message = "Sign in to continue."
+		}
+		if err := ui.warning(message); err != nil {
+			return auth.LoginSummary{}, err
+		}
+		if options.APIOrigin == "" {
+			options.APIOrigin = "https://api.zorveus.com"
+		}
+		origin, err := api.CanonicalOrigin(options.APIOrigin, true)
+		if err != nil {
+			return auth.LoginSummary{}, err
+		}
+		options.APIOrigin = origin
+		if options.Scope == "" {
+			options.Scope = defaultLoginScopes
+		}
 		// Older saved logins did not include their dashboard origin.
 		if options.DashboardOrigin == "" {
 			switch options.APIOrigin {
@@ -21,23 +41,28 @@ func loginRecovery(settings *flags, dependencies Dependencies, input io.Reader, 
 			case "http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000":
 				options.DashboardOrigin = "http://localhost:3000"
 			default:
-				return problem.New("login_required", "This saved login has no dashboard URL. Run zorveus login with --api-url and --dashboard-url once to enable sign-in recovery.", 3)
+				ui.note("Sign-in needs the dashboard URL for " + terminalText(options.APIOrigin) + ".")
+				prompt := setupInput{ctx: ctx, reader: bufio.NewReader(input), output: stderr, color: ui.color}
+				address, err := prompt.ask("Dashboard URL", "")
+				if err != nil {
+					return auth.LoginSummary{}, loginApprovalCanceled()
+				}
+				options.DashboardOrigin = address
 			}
 		}
 		dashboard, err := api.CanonicalOrigin(options.DashboardOrigin, true)
 		if err != nil {
-			return err
+			return auth.LoginSummary{}, err
 		}
 		options.DashboardOrigin = dashboard
-		ui := terminalUI{output: stderr, color: terminalColors(settings, dependencies.ErrorIsTerminal)}
-		if err := ui.warning("Your session could not be renewed. Sign in again to continue."); err != nil {
-			return err
-		}
 		if err := waitForLoginApproval(ctx, input, ui); err != nil {
-			return err
+			return auth.LoginSummary{}, err
 		}
-		_, err = browserLogin(ctx, settings, dependencies, stderr, options, 5*time.Minute, false)
-		return err
+		result, err := browserLogin(ctx, settings, dependencies, stderr, options, 5*time.Minute, false)
+		if err != nil {
+			return auth.LoginSummary{}, err
+		}
+		return result, promptDefaultOrganization(ctx, settings, dependencies, input, stderr, result)
 	}
 }
 

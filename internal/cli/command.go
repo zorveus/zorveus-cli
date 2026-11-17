@@ -45,6 +45,7 @@ type flags struct {
 	localMode          bool
 	allowInsecureLocal bool
 	apiOrigin          string
+	organization       string
 	logLevel           string
 	noColor            bool
 }
@@ -62,6 +63,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	if dependencies.Auth != nil {
 		service := *dependencies.Auth
 		service.RequestLogin = nil
+		service.ChooseOrganization = nil
 		dependencies.Auth = &service
 	}
 	settings := &flags{}
@@ -73,14 +75,15 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		PersistentPreRunE: func(command *cobra.Command, arguments []string) error {
+			if dependencies.Auth != nil {
+				dependencies.Auth.Organization = settings.organization
+			}
 			if dependencies.Auth != nil && dependencies.InputIsTerminal && !settings.nonInteractive && !isMCPCommand(command) {
-				input := command.InOrStdin()
-				if command.Name() == "setup" {
-					// Setup and sign-in prompts must share any input already buffered.
-					input = bufio.NewReader(input)
-					command.Root().SetIn(input)
-				}
+				// All prompts in this invocation must share buffered input.
+				input := bufio.NewReader(command.InOrStdin())
+				command.Root().SetIn(input)
 				dependencies.Auth.RequestLogin = loginRecovery(settings, dependencies, input, stderr)
+				dependencies.Auth.ChooseOrganization = organizationPicker(settings, dependencies, input, stderr)
 			}
 			level := new(slog.Level)
 			if err := level.UnmarshalText([]byte(settings.logLevel)); err != nil {
@@ -117,6 +120,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.PersistentFlags().BoolVar(&settings.localMode, "local", false, "Use the local API on port 8000 and dashboard on port 3000")
 	root.PersistentFlags().BoolVar(&settings.allowInsecureLocal, "allow-insecure-loopback", false, "Allow HTTP origins on localhost or loopback IPs for local development")
 	root.PersistentFlags().StringVar(&settings.apiOrigin, "api-url", "", "Override the API origin; login defaults to https://api.zorveus.com")
+	root.PersistentFlags().StringVar(&settings.organization, "org", "", "Organization ID; otherwise use the project, only saved organization, or default")
 	root.PersistentFlags().StringVar(&settings.logLevel, "log-level", "info", "Diagnostic level: debug, info, warn, error")
 	root.AddCommand(loginCommand(settings, dependencies, stdout, stderr))
 	root.AddCommand(appsCommand(settings, dependencies, stdout))
@@ -177,11 +181,10 @@ func loginCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 	var manualBrowser bool
 	command := &cobra.Command{
 		Use:               "login",
-		Short:             "Log in through browser consent and replace the saved login",
+		Short:             "Log in through browser consent and save this organization's session",
 		Args:              noArguments,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			ui := terminalUI{output: stdout, color: terminalColors(settings, dependencies.OutputIsTerminal)}
 			if settings.nonInteractive || !dependencies.InputIsTerminal {
 				return problem.New("interactive_login_required", "Login requires an interactive terminal and browser authorization.", 3)
 			}
@@ -203,21 +206,19 @@ func loginCommand(settings *flags, dependencies Dependencies, stdout, stderr io.
 				return problem.New("invalid_arguments", "Provide at least one scope and a login timeout greater than zero and at most 30 minutes.", 2)
 			}
 			result, err := browserLogin(command.Context(), settings, dependencies, stderr, auth.LoginOptions{
-				APIOrigin:       settings.apiOrigin,
-				DashboardOrigin: dashboard,
-				Scope:           scopes,
+				APIOrigin:            settings.apiOrigin,
+				DashboardOrigin:      dashboard,
+				Scope:                scopes,
+				ExpectedOrganization: dependencies.Auth.Organization,
 			}, timeout, manualBrowser)
 			if err != nil {
 				return err
 			}
+			if err := promptDefaultOrganization(command.Context(), settings, dependencies, command.InOrStdin(), stderr, result); err != nil {
+				return err
+			}
 			if settings.jsonOutput {
 				return writeJSON(stdout, command.CommandPath(), result)
-			}
-			if err := ui.success("Signed in"); err != nil {
-				return err
-			}
-			if err := ui.field("Organization", result.Organization); err != nil {
-				return err
 			}
 			return nil
 		},

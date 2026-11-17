@@ -46,7 +46,11 @@ func (service *Service) Retrieve(ctx context.Context, origin, config, item strin
 	if selected.id == "" || selected.kind != "service" && appID == "" {
 		return RetrievedSecret{}, problem.New("apply_required", "This item has no applied resource ID. Review and apply its plan before retrieving its secret.", 2)
 	}
-	remote := &gateway{ctx: ctx, service: service, target: Target{Origin: origin}}
+	target, err := ProjectTarget(config, origin, desired.OrganizationID)
+	if err != nil {
+		return RetrievedSecret{}, err
+	}
+	remote := &gateway{ctx: ctx, service: service, target: target}
 	if err := remote.identify(); err != nil {
 		return RetrievedSecret{}, err
 	}

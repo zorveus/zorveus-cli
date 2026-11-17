@@ -13,7 +13,9 @@ zorveus whoami
 
 Choose the organization that owns your app. For a local backend, use `zorveus login --local` instead.
 
-The MCP server shares the CLI's saved login and refresh lock. It does not open a login browser. If a remote tool reports `login_required` or `authorization_required`, log in from a terminal and retry the tool. The server reads the current saved login for each operation, so a new login does not require a server restart.
+The MCP server shares the CLI's saved organization logins and refresh lock. Manifest tools select the organization recorded in the project; apply uses the saved plan's organization. Account tools use the only saved organization or your default. Add `--org org_example` to the server arguments to select an organization explicitly. This selection must agree with any manifest or saved plan being used.
+
+The server does not open a login browser or ask you to choose an organization. If a remote tool reports `login_required` or `authorization_required`, log in from a terminal and retry the tool. If several organizations are available without a default, set one during terminal login or restart the server with `--org`. New or renewed logins are read for each operation and do not require a server restart.
 
 Init, validation, clone, and promotion work offline without login. The server never returns management tokens or generated secrets to the agent.
 

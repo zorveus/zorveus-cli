@@ -16,6 +16,9 @@
     "version": {
       "const": 1
     },
+    "organizationId": {
+      "$ref": "#/$defs/id"
+    },
     "app": {
       "$ref": "#/$defs/app"
     },

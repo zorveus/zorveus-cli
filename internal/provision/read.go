@@ -37,6 +37,7 @@ func (remote *gateway) identify() error {
 		if remote.target.User != "" && me.User.ID != remote.target.User {
 			return conflict()
 		}
+		remote.service.Auth.RememberOrganizationName(login, me.Orgs)
 		remote.target = Target{Origin: login.APIOrigin, Org: login.Organization, User: me.User.ID}
 		return nil
 	})

@@ -143,13 +143,58 @@ To request fewer permissions, pass an explicit scope list. For example, to view 
 zorveus login --scope "apps:read"
 ```
 
-The CLI keeps one saved login. Signing in again replaces it. To request different permissions or switch organizations, run `login` again. Your organization role still determines which operations you can perform.
+The CLI saves a separate login for each API origin and organization in your OS credential store. Signing in to another organization keeps your existing logins. Signing in to the same organization at the same API origin replaces only that session. Your organization role still determines which operations you can perform.
 
-If renewal fails or your session expires without renewal, an interactive command explains what happened and waits for Enter before opening browser sign-in. After sign-in, the command continues from where it stopped. Sign in with the same organization and user for an existing plan. Setup keeps your answers, and apply keeps its recorded progress. Press Ctrl+C to cancel. The CLI never retries a refresh token whose outcome is uncertain.
+The organization IDs, cached names, API origins, and default choice are indexed in `zorveus/logins.json` under your operating system's user configuration directory. This file contains no tokens. Each organization's tokens stay in a separate OS credential-store entry.
+
+Sign-in prompts show `My Startup (org_example)` when the name is known, or just `org_example` otherwise. Names are cached from existing `/me` responses and do not change which organization is selected.
+
+After each successful sign-in, the CLI asks **Use this organization as your default?**. Answer `n` to keep your existing default. Your previous single saved login remains available as the default when you first use this version.
+
+If a terminal command needs a login, it offers sign-in within that command. This includes your first command and an organization without saved credentials. Press Enter to open the browser. After consent and the default-organization question, the pending command continues. You do not need to run `login` separately. Missing logins request all CLI management permissions by default.
+
+### Work with multiple organizations
+
+`--org` is optional. To authorize two organizations and select one explicitly:
+
+```sh
+zorveus login --org org_development
+zorveus login --org org_production
+zorveus apps list --org org_production
+zorveus whoami --org org_development
+```
+
+Choose the requested organization in the browser. Replace these example IDs with your actual organization IDs. Add `--local` to login when using a local backend.
+
+Commands select the organization in this order:
+
+1. Explicit `--org`, when supplied.
+2. The organization in the saved plan or manifest. Older manifests can use their existing `.zorveus` state.
+3. The only saved organization matching the API origin, if there is just one.
+4. Your saved default, if it matches the requested API origin.
+
+When several logins match and none is the default, an interactive command asks you to choose. Noninteractive commands and MCP tools require `--org`, a project organization, or a matching default instead. If the same organization has logins at several API origins, use `--api-url` to distinguish them.
+
+Setup and import record `organizationId` in the manifest. Apply records it alongside resource IDs. Plan uses this field without requiring `--org`:
+
+```json
+{
+	"version": 1,
+	"organizationId": "org_production",
+	"app": {
+		"id": "app_example",
+		"name": "Production"
+	}
+}
+```
+
+An explicit `--org` must agree with a manifest or saved plan's organization. It cannot move existing resources into another organization. Use a separate manifest for another project.
+
+If renewal fails or your session expires without renewal, an interactive command explains what happened and waits for Enter before opening browser sign-in. Renewal updates only the selected organization's tokens. After sign-in, the command continues from where it stopped. An operation already tied to an organization and user stops if you sign in to a different target; the new login stays saved. Setup keeps your answers, and apply keeps its recorded progress. Press Ctrl+C to cancel. The CLI never retries a refresh token whose outcome is uncertain.
 
 Commands with `--non-interactive`, commands without a terminal, and MCP tools return a login error instead. Run `zorveus login` from your terminal, then retry them.
 
-Use `login --no-browser` to print the authorization URL and open it in your preferred browser. To end the CLI session:
+Use `login --no-browser` to print the authorization URL and open it in your preferred browser. To revoke and remove the selected organization's CLI session, run `logout`. Other saved organizations remain signed in. Add `--org` to select one explicitly:
 
 ```sh
 zorveus logout
@@ -233,6 +278,8 @@ zorveus status --config zorveus.json
 
 Apply creates or updates the resources and writes their IDs back into your manifest. Keep those IDs when editing existing resources. Running plan again after a successful apply produces zero changes when the configuration matches.
 
+Recreating `zorveus.json` with `init` does not remove its previous tracking in `.zorveus/zorveus.json.state.json`. If the new file has no `app.id` but that state belongs to an existing app, plan reports the app mismatch before sign-in. Run `zorveus setup` to review saved configurations or explicitly start a new app with the previous tracking backed up. To keep managing the existing app, restore its manifest with its IDs or import that app.
+
 The CLI saves newly generated secrets in your OS credential store. Secrets do not appear in the manifest, saved plans, or apply output. Saved credentials are associated with resource IDs, so later applies and display-name changes do not lose them.
 
 To retrieve one secret, select its manifest reference or ID:
@@ -307,7 +354,7 @@ zorveus status --config imported.json
 
 Replace `app_example` with the app ID from your manifest or dashboard. Import requires `apps:read`, `app_connections:read`, and `routing_keys:read`; the default login request already includes them.
 
-Import writes the app's settings, active programmatic inference connections, and routing keys to a new manifest, preserving their IDs. It does not import secrets, customer connections, or shared organization credentials. The destination must not already exist.
+Import writes the organization ID, app settings, active programmatic inference connections, and routing keys to a new manifest, preserving their IDs. It does not import secrets, customer connections, or shared organization credentials. The destination must not already exist. Use `--org` when importing from an organization other than your default.
 
 Status reports changed fields, missing or revoked resources, and the latest apply result without changing anything. In JSON output, check `in_sync` to determine whether the remote configuration matches.
 
@@ -320,7 +367,7 @@ zorveus plan --config zorveus.dev.json
 zorveus apply --plan zorveus.dev.plan.json --yes
 ```
 
-Clone preserves configuration and aliases while removing app, inference-key, and routing-key IDs. Applying the copy creates separate resources. The source is unchanged, and the destination must be new.
+Clone preserves configuration and aliases while removing the organization ID and app, inference-key, and routing-key IDs. Use `--org` when planning the copy to select a different organization. Applying the copy creates separate resources. The source is unchanged, and the destination must be new.
 
 Clone rejects manifests containing service keys or provider credentials because those resources are shared across the organization. Prepare a manifest without those sections before cloning.
 
@@ -409,7 +456,7 @@ zorveus apps list
 
 For other environments, use `--api-url` and `login --dashboard-url`. Custom HTTP origins must use loopback addresses and require `--allow-insecure-loopback`.
 
-The CLI saves the dashboard URL for sign-in recovery. If an older login uses a custom API origin, run `login` with both URLs once to save that dashboard URL.
+The CLI saves the dashboard URL for sign-in recovery. If a custom API origin has no saved dashboard URL, an interactive command asks you to enter it before opening sign-in. Known production and local origins use their standard dashboard URLs.
 
 ## Shell completion
 

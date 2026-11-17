@@ -249,3 +249,15 @@ func TestUncertainRefreshCannotReportSuccessfulRemoteLogout(t *testing.T) {
 		t.Fatal("logout claimed to revoke a session whose current tokens are unknown")
 	}
 }
+
+func (store *memoryStore) Read() (SavedLogins, error) {
+	login, err := store.Load()
+	return SavedLogins{Version: 1, Logins: []Login{login}, Default: LoginReference{APIOrigin: login.APIOrigin, Organization: login.Organization}}, err
+}
+
+func (store *memoryStore) Write(saved SavedLogins) error {
+	if len(saved.Logins) == 0 {
+		return store.Delete()
+	}
+	return store.Save(saved.Logins[len(saved.Logins)-1])
+}

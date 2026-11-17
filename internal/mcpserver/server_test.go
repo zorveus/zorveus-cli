@@ -317,3 +317,15 @@ func TestPlanApplyAndStatusShareProvisioningAndKeepSecretsPrivate(t *testing.T) 
 		t.Fatal("MCP output, logs, or manifest exposed a secret")
 	}
 }
+
+func (store *loginStore) Read() (auth.SavedLogins, error) {
+	login, err := store.Load()
+	return auth.SavedLogins{Version: 1, Logins: []auth.Login{login}, Default: auth.LoginReference{APIOrigin: login.APIOrigin, Organization: login.Organization}}, err
+}
+
+func (store *loginStore) Write(saved auth.SavedLogins) error {
+	if len(saved.Logins) == 0 {
+		return store.Delete()
+	}
+	return store.Save(saved.Logins[len(saved.Logins)-1])
+}

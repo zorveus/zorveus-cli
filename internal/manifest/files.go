@@ -41,6 +41,7 @@ func Clone(source, destination, name string) (FileResult, error) {
 		}
 	}
 	app := document.data["app"].(map[string]any)
+	delete(document.data, "organizationId")
 	delete(app, "id")
 	if name != "" {
 		app["name"] = name

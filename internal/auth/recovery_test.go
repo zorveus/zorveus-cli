@@ -48,20 +48,20 @@ func TestRenewalRecoveryContinuesOnceAfterUnlockingCredentials(t *testing.T) {
 				}
 			}
 			logins, operations := 0, 0
-			service.RequestLogin = func(ctx context.Context, options LoginOptions) error {
+			service.RequestLogin = func(ctx context.Context, options LoginOptions) (LoginSummary, error) {
 				logins++
-				if options.APIOrigin != server.URL || options.DashboardOrigin != store.login.DashboardOrigin || options.Scope != store.login.Scope || options.ExpectedOrganization != "org_a" {
+				if options.APIOrigin != server.URL || options.DashboardOrigin != store.login.DashboardOrigin || options.Scope != store.login.Scope || options.ExpectedOrganization != "" {
 					t.Fatal("recovery lost the saved login target or permissions")
 				}
 				unlock, err := service.Lock(ctx)
 				if err != nil {
-					return err
+					return LoginSummary{}, err
 				}
 				defer unlock()
 				fresh := savedLogin(server.URL)
 				fresh.AccessToken, fresh.RefreshToken = "browser-access", "browser-refresh"
 				fresh.ExpiresAt = time.Now().Add(time.Hour)
-				return store.Save(fresh)
+				return LoginSummary{APIOrigin: fresh.APIOrigin, Organization: fresh.Organization}, store.Save(fresh)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -92,7 +92,7 @@ func TestCanceledRecoveryPreservesBlockedLoginAndDoesNotRunOperation(t *testing.
 	previous := store.login
 	service := testService(store)
 	canceled := problem.New("login_canceled", "Login canceled.", 3)
-	service.RequestLogin = func(context.Context, LoginOptions) error { return canceled }
+	service.RequestLogin = func(context.Context, LoginOptions) (LoginSummary, error) { return LoginSummary{}, canceled }
 	err := service.UseLogin(context.Background(), LoginTarget{}, nil, func(Login) error {
 		t.Fatal("operation ran after canceled login")
 		return nil
@@ -112,9 +112,9 @@ func TestRecoveryRejectsChangedTargetBeforeRunningOperation(t *testing.T) {
 			store := &memoryStore{present: true, login: savedLogin(server.URL)}
 			store.login.RefreshBlocked = true
 			service := testService(store)
-			service.RequestLogin = func(_ context.Context, options LoginOptions) error {
-				if options.ExpectedUser != "original_user" {
-					t.Fatal("recovery did not pin the operation's user")
+			service.RequestLogin = func(_ context.Context, options LoginOptions) (LoginSummary, error) {
+				if options.ExpectedOrganization != "" {
+					t.Fatal("browser sign-in was restricted to the old organization")
 				}
 				fresh := savedLogin(server.URL)
 				fresh.ExpiresAt = time.Now().Add(time.Hour)
@@ -124,9 +124,9 @@ func TestRecoveryRejectsChangedTargetBeforeRunningOperation(t *testing.T) {
 				if changed == "organization" {
 					fresh.Organization = "other_org"
 				}
-				return store.Save(fresh)
+				return LoginSummary{APIOrigin: fresh.APIOrigin, Organization: fresh.Organization}, store.Save(fresh)
 			}
-			err := service.UseLogin(context.Background(), LoginTarget{UserID: "original_user"}, nil, func(Login) error {
+			err := service.UseLogin(context.Background(), LoginTarget{Organization: "org_a", UserID: "original_user"}, nil, func(Login) error {
 				t.Fatal("operation ran against a different target")
 				return nil
 			})
@@ -141,9 +141,9 @@ func TestOperationErrorNeverRestartsLoginOrReplaysOperation(t *testing.T) {
 	store := &memoryStore{present: true, login: savedLogin("https://api.example.test")}
 	store.login.ExpiresAt = time.Now().Add(time.Hour)
 	service := testService(store)
-	service.RequestLogin = func(context.Context, LoginOptions) error {
+	service.RequestLogin = func(context.Context, LoginOptions) (LoginSummary, error) {
 		t.Fatal("an operation error started browser login")
-		return nil
+		return LoginSummary{}, nil
 	}
 	writes := 0
 	uncertain := errors.New("the mutation response was lost")
@@ -163,8 +163,9 @@ func TestRenewalPreservesDashboardOrigin(t *testing.T) {
 	defer server.Close()
 	store := &memoryStore{present: true, login: savedLogin(server.URL)}
 	store.login.DashboardOrigin = "https://custom-dashboard.example.test"
+	store.login.OrganizationName = "My Startup"
 	err := testService(store).UseLogin(context.Background(), LoginTarget{}, nil, func(Login) error { return nil })
-	if err != nil || store.login.DashboardOrigin != "https://custom-dashboard.example.test" {
+	if err != nil || store.login.DashboardOrigin != "https://custom-dashboard.example.test" || store.login.OrganizationName != "My Startup" {
 		t.Fatalf("renewal lost the dashboard origin: %v", err)
 	}
 }
@@ -174,7 +175,7 @@ func TestRecoveryDoesNotLoopWhenReplacementAlsoNeedsLogin(t *testing.T) {
 	store.login.RefreshBlocked = true
 	service := testService(store)
 	logins := 0
-	service.RequestLogin = func(context.Context, LoginOptions) error { logins++; return nil }
+	service.RequestLogin = func(context.Context, LoginOptions) (LoginSummary, error) { logins++; return LoginSummary{}, nil }
 	err := service.UseLogin(context.Background(), LoginTarget{}, nil, func(Login) error {
 		t.Fatal("operation ran without a usable replacement")
 		return nil

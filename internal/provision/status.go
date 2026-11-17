@@ -55,7 +55,11 @@ func (service *Service) Status(ctx context.Context, origin, config string) (Stat
 	if err != nil {
 		return StatusResult{}, err
 	}
-	remote := &gateway{ctx: ctx, service: service, target: Target{Origin: origin}}
+	target, err := ProjectTarget(config, origin, desired.OrganizationID)
+	if err != nil {
+		return StatusResult{}, err
+	}
+	remote := &gateway{ctx: ctx, service: service, target: target}
 	if err := remote.identify(); err != nil {
 		return StatusResult{}, err
 	}

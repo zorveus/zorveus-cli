@@ -14,9 +14,9 @@ zorveus setup
 
 For a local Zorveus backend, use `zorveus setup --local`.
 
-Setup checks your saved login. If you need to sign in, it opens browser consent, where you select the organization. It displays the API endpoint and organization before preparing resources.
+Setup uses the existing manifest's organization, your only saved organization, or your default. Add `--org org_example` to select an organization explicitly. It must match an existing manifest's organization. If you need to sign in, setup explains why and waits for Enter before opening browser consent. It then asks whether to make that organization your default and continues setup. It displays the API endpoint and organization before preparing resources.
 
-If your session expires while you answer questions or apply changes, setup explains what happened and waits for Enter before opening sign-in again. After sign-in, setup continues with your saved answers and progress. Use the same organization and user. Press Ctrl+C to cancel without sending the pending API request.
+If your session expires while you answer questions or apply changes, setup explains what happened and waits for Enter before opening sign-in again. After sign-in to the same organization and user, setup continues with your saved answers and progress. Choosing another target saves its login and stops the pending operation. Other organizations' logins stay available. Press Ctrl+C to cancel without sending the pending API request.
 
 The wizard asks for:
 
@@ -65,7 +65,7 @@ For a new app, the plan includes:
 
 Enforcement and output limiting follow the backend's existing behavior. The wizard does not add provider credentials or payment-provider configuration.
 
-Apply creates the resources, writes their IDs into your local manifest, and saves generated secrets in the OS credential store. Secrets stay out of manifests, plans, journals, and setup output. Use `retrieve` to print one saved value explicitly.
+Setup records `organizationId` in the manifest. Apply creates the resources, writes their IDs into your local manifest, and saves generated secrets in the OS credential store. Secrets stay out of manifests, plans, journals, and setup output. Use `retrieve` to print one saved value explicitly.
 
 When setup reports **Setup complete**, your resources are ready. Run your application through your usual development or deployment workflow.
 

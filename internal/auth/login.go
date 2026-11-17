@@ -20,8 +20,9 @@ type LoginOptions struct {
 	DashboardOrigin      string
 	Scope                string
 	ExpectedOrganization string
-	ExpectedUser         string
 	OpenBrowser          func(context.Context, string)
+	// Operations provide a short explanation before requesting browser sign-in.
+	SignInMessage string
 }
 
 type callbackResult struct {
@@ -86,13 +87,7 @@ func (service *Service) Login(ctx context.Context, options LoginOptions) (LoginS
 			return LoginSummary{}, service.discardLogin(login, "The API returned permissions that were not requested.")
 		}
 		if options.ExpectedOrganization != "" && login.Organization != options.ExpectedOrganization {
-			return LoginSummary{}, service.discardLogin(login, loginTargetChanged().Error())
-		}
-		if options.ExpectedUser != "" {
-			user, err := service.loginUser(ctx, login)
-			if err != nil || user != options.ExpectedUser {
-				return LoginSummary{}, service.discardLogin(login, "Could not confirm the same user. Sign in with the original account to continue.")
-			}
+			return LoginSummary{}, service.discardLogin(login, "Browser sign-in selected a different organization than requested. Retry login and choose "+options.ExpectedOrganization+".")
 		}
 		return service.replaceLogin(ctx, login)
 	}
@@ -104,7 +99,7 @@ func (service *Service) checkCredentialStore(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	_, err = service.Store.Load()
+	_, err = service.Store.Read()
 	if errors.Is(err, ErrNoLogin) {
 		return nil
 	}
@@ -117,22 +112,32 @@ func (service *Service) replaceLogin(ctx context.Context, replacement Login) (Lo
 		return LoginSummary{}, service.discardLogin(replacement, "Could not lock the saved login for replacement.")
 	}
 	defer unlock()
-	previous, err := service.loadLogin("")
+	saved, err := service.Store.Read()
 	if err != nil && !errors.Is(err, ErrNoLogin) {
 		return LoginSummary{}, service.discardLogin(replacement, "Could not read the previous login. It was not replaced.")
 	}
-	if err == nil {
+	previous, exists := saved.find(reference(replacement))
+	if exists && replacement.OrganizationName == "" {
+		replacement.OrganizationName = previous.OrganizationName
+	}
+	if exists && previous.AccessToken != "" {
 		// An uncertain refresh may have consumed the only token we can revoke.
 		if err := service.revokeLogin(ctx, previous); err != nil && !previous.RefreshBlocked {
 			return LoginSummary{}, service.discardLogin(replacement, "Could not confirm revocation of the previous login. Its saved credentials were retained. Retry login or revoke the session from the dashboard.")
 		}
 	}
-	if err := service.Store.Save(replacement); err != nil {
-		return LoginSummary{}, service.discardLogin(replacement, "Could not save the new login. Any previous login has already been revoked. Unlock the credential store and log in again.")
+	saved.put(replacement)
+	if err := service.Store.Write(saved); err != nil {
+		message := "Could not save this organization's new login. Other organizations' saved logins were kept."
+		if exists {
+			message += " Its previous session may have already been revoked."
+		}
+		return LoginSummary{}, service.discardLogin(replacement, message+" Unlock the credential store and log in again.")
 	}
 	return LoginSummary{
 		APIOrigin:                replacement.APIOrigin,
 		Organization:             replacement.Organization,
+		OrganizationName:         replacement.OrganizationName,
 		Scope:                    replacement.Scope,
 		ExpiresAt:                replacement.ExpiresAt,
 		Renewal:                  replacement.RefreshToken != "",

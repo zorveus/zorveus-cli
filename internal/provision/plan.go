@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -112,10 +113,22 @@ func (service *Service) buildFrom(ctx context.Context, origin, config, source st
 		}
 		sourceDigest = digest(sourceBytes)
 	}
-	remote := &gateway{ctx: ctx, service: service, target: Target{Origin: origin}}
+	target, err := ProjectTarget(config, origin, desired.OrganizationID)
+	if err != nil {
+		return Plan{}, err
+	}
+	// A local app mismatch can be explained before asking the user to sign in.
+	if _, _, err := readState(config, target, desired.App.text("id")); err != nil {
+		return Plan{}, err
+	}
+	remote := &gateway{ctx: ctx, service: service, target: target}
 	if err := remote.identify(); err != nil {
 		return Plan{}, err
 	}
+	var document Fields
+	_ = json.Unmarshal(canonical, &document)
+	document.set("organizationId", remote.target.Org)
+	canonical = encoded(document)
 	state, stateBytes, err := readState(config, remote.target, desired.App.text("id"))
 	if err != nil {
 		return Plan{}, err
@@ -379,8 +392,26 @@ func readState(config string, target Target, appID string) (State, []byte, error
 	if err != nil {
 		return state, nil, err
 	}
-	if exists && (state.Version != 1 || state.Target.Origin != target.Origin || state.Target.Org != target.Org || state.AppID != appID) {
-		return state, nil, problem.New("state_target_mismatch", "This manifest's CLI state belongs to another app or login target. Use a separate manifest for a new app.", 4)
+	if !exists {
+		return state, data, nil
+	}
+	if state.Version != 1 {
+		return state, nil, problem.New("state_target_mismatch", "The saved CLI state uses an unsupported version. Check "+statePath(config)+" before continuing.", 4)
+	}
+	if state.Target.Origin != target.Origin {
+		message := fmt.Sprintf("Saved state uses API server %q, but this command uses %q. Use the saved API server or a separate manifest.", state.Target.Origin, target.Origin)
+		return state, nil, problem.New("state_target_mismatch", message, 4)
+	}
+	if state.Target.Org != target.Org {
+		message := fmt.Sprintf("Saved state belongs to organization %q, but this command selected organization %q. Select the saved organization with --org or use a separate manifest.", state.Target.Org, target.Org)
+		return state, nil, problem.New("state_target_mismatch", message, 4)
+	}
+	if state.AppID != appID {
+		message := fmt.Sprintf("%s has app.id %q, but its saved state belongs to app %q. Use the matching manifest or run zorveus setup with this manifest to review recovery options.", filepath.Base(config), appID, state.AppID)
+		if appID == "" {
+			message = fmt.Sprintf("%s has no app.id, so it describes a new app. Its saved state in %s still belongs to app %q. Run zorveus setup with this manifest to choose an existing configuration or start a new app.", filepath.Base(config), statePath(config), state.AppID)
+		}
+		return state, nil, problem.New("state_target_mismatch", message, 4)
 	}
 	return state, data, nil
 }

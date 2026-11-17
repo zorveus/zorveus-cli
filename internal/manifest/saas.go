@@ -18,11 +18,12 @@ type SaaSRouting struct {
 }
 
 type SaaSOptions struct {
-	Name          string
-	Models        []string
-	CreditsPerUSD string
-	Plans         []SaaSPlan
-	Routing       *SaaSRouting
+	OrganizationID string
+	Name           string
+	Models         []string
+	CreditsPerUSD  string
+	Plans          []SaaSPlan
+	Routing        *SaaSRouting
 }
 
 // SaaS builds the same manifest for guided and non-interactive setup.
@@ -59,6 +60,9 @@ func SaaS(options SaaSOptions) ([]byte, error) {
 		"app":         map[string]any{"name": options.Name, "allowedModels": options.Models, "creditUnitsPerUsd": options.CreditsPerUSD},
 		"keys":        keys,
 		"serviceKeys": map[string]any{"customers": map[string]any{"name": "Customer reads", "scopes": []string{"product_users:read"}}},
+	}
+	if options.OrganizationID != "" {
+		document["organizationId"] = options.OrganizationID
 	}
 	if options.Routing != nil {
 		members := make([]string, 0, len(options.Plans))

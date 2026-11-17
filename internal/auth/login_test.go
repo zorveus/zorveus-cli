@@ -43,7 +43,7 @@ func completeBrowserLogin(t *testing.T, address, outcome string) url.Values {
 	return parameters
 }
 
-func TestBrowserLoginUsesPKCEAndReplacesPreviousOrganization(t *testing.T) {
+func TestBrowserLoginUsesPKCEAndKeepsPreviousOrganization(t *testing.T) {
 	verifiers := make(chan string, 1)
 	revocations := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -85,8 +85,8 @@ func TestBrowserLoginUsesPKCEAndReplacesPreviousOrganization(t *testing.T) {
 	if authorization.Get("renewal_allowed") != "true" || authorization.Get("org_id") != "" || authorization.Get("credential_type") != "management" || len(authorization.Get("state")) < 16 {
 		t.Fatal("incorrect browser authorization parameters")
 	}
-	if <-revocations != "old-refresh" || store.login.Organization != "org_b" || store.login.AccessToken != "new-access" || summary.Organization != "org_b" {
-		t.Fatal("new login did not replace the old organization and session")
+	if len(revocations) != 0 || store.login.Organization != "org_b" || store.login.AccessToken != "new-access" || summary.Organization != "org_b" {
+		t.Fatal("new organization login revoked the previous organization or was not saved")
 	}
 	response, callbackError := http.Get(authorization.Get("redirect_uri"))
 	if callbackError == nil {
@@ -156,7 +156,7 @@ func TestReplacementRevocationFailureKeepsOldLoginAndRevokesNewSession(t *testin
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		_ = request.ParseForm()
 		if request.URL.Path == "/oauth/management/token" {
-			sendTokens(writer, "org_b")
+			sendTokens(writer, "org_a")
 			return
 		}
 		token := request.Form.Get("token")
@@ -226,36 +226,25 @@ func TestLoginWithoutRenewalSavesOnlyTheAccessToken(t *testing.T) {
 	}
 }
 
-func TestRecoveryRejectsDifferentAccountBeforeReplacingSavedLogin(t *testing.T) {
-	for _, changed := range []string{"organization", "user"} {
-		t.Run(changed, func(t *testing.T) {
-			revoked := []string{}
-			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				_ = request.ParseForm()
-				switch request.URL.Path {
-				case "/oauth/management/token":
-					organization := "org_a"
-					if changed == "organization" {
-						organization = "org_b"
-					}
-					sendTokens(writer, organization)
-				case "/me":
-					_, _ = writer.Write([]byte(`{"user":{"user_id":"other_user","email":"other@example.test"},"session":{"authenticated":true,"expires_at":"2099-01-01T00:00:00Z"}}`))
-				case "/oauth/management/revoke":
-					revoked = append(revoked, request.Form.Get("token"))
-				}
-			}))
-			defer server.Close()
-			previous := savedLogin(server.URL)
-			store := &memoryStore{present: true, login: previous}
-			_, err := testService(store).Login(context.Background(), LoginOptions{
-				APIOrigin: server.URL, DashboardOrigin: "https://dashboard.example.test", Scope: "apps:read",
-				ExpectedOrganization: "org_a", ExpectedUser: "original_user",
-				OpenBrowser: func(_ context.Context, address string) { completeBrowserLogin(t, address, "approve") },
-			})
-			if err == nil || store.login != previous || len(revoked) != 1 || revoked[0] != "new-refresh" {
-				t.Fatalf("wrong account replaced the saved login: error=%v revoked=%v", err, revoked)
-			}
-		})
+func TestLoginRejectsOrganizationDifferentFromExplicitRequest(t *testing.T) {
+	revoked := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_ = request.ParseForm()
+		if request.URL.Path == "/oauth/management/token" {
+			sendTokens(writer, "org_b")
+			return
+		}
+		revoked = append(revoked, request.Form.Get("token"))
+	}))
+	defer server.Close()
+	previous := savedLogin(server.URL)
+	store := &memoryStore{present: true, login: previous}
+	_, err := testService(store).Login(context.Background(), LoginOptions{
+		APIOrigin: server.URL, DashboardOrigin: "https://dashboard.example.test", Scope: "apps:read",
+		ExpectedOrganization: "org_a",
+		OpenBrowser:          func(_ context.Context, address string) { completeBrowserLogin(t, address, "approve") },
+	})
+	if err == nil || store.login != previous || len(revoked) != 1 || revoked[0] != "new-refresh" {
+		t.Fatalf("explicit organization selection was ignored: error=%v revoked=%v", err, revoked)
 	}
 }

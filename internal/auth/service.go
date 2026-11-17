@@ -11,11 +11,13 @@ import (
 )
 
 type Service struct {
-	API          *api.Client
-	Store        Store
-	Lock         func(context.Context) (func(), error)
-	Now          func() time.Time
-	RequestLogin func(context.Context, LoginOptions) error
+	API                *api.Client
+	Store              Store
+	Lock               func(context.Context) (func(), error)
+	Now                func() time.Time
+	RequestLogin       func(context.Context, LoginOptions) (LoginSummary, error)
+	Organization       string
+	ChooseOrganization func(context.Context, []LoginReference) (LoginReference, error)
 }
 
 type LoginTarget struct {
@@ -27,6 +29,7 @@ type LoginTarget struct {
 type LoginSummary struct {
 	APIOrigin                string    `json:"api_origin"`
 	Organization             string    `json:"organization"`
+	OrganizationName         string    `json:"organization_name,omitempty"`
 	Scope                    string    `json:"scope"`
 	ExpiresAt                time.Time `json:"expires_at"`
 	Renewal                  bool      `json:"renewal_allowed"`
@@ -45,11 +48,12 @@ type LogoutResult struct {
 }
 
 type WhoamiResult struct {
-	APIOrigin    string        `json:"api_origin"`
-	Organization string        `json:"organization"`
-	Scope        string        `json:"scope"`
-	User         api.MeUser    `json:"user"`
-	Session      api.MeSession `json:"session"`
+	APIOrigin        string        `json:"api_origin"`
+	Organization     string        `json:"organization"`
+	OrganizationName string        `json:"organization_name,omitempty"`
+	Scope            string        `json:"scope"`
+	User             api.MeUser    `json:"user"`
+	Session          api.MeSession `json:"session"`
 }
 
 func (service *Service) UseLogin(ctx context.Context, target LoginTarget, scopes []string, run func(Login) error) error {
@@ -73,7 +77,8 @@ func (service *Service) Whoami(ctx context.Context, expectedOrigin string) (Whoa
 	}
 	return WhoamiResult{
 		APIOrigin: currentLogin.APIOrigin, Organization: currentLogin.Organization, Scope: currentLogin.Scope,
-		User: me.User, Session: me.Session,
+		OrganizationName: service.RememberOrganizationName(currentLogin, me.Orgs),
+		User:             me.User, Session: me.Session,
 	}, nil
 }
 
@@ -101,7 +106,7 @@ func (service *Service) renewLogin(ctx context.Context, login Login) (Login, err
 		return Login{}, problem.New("login_required", "The access token expired and renewal was not approved. Run zorveus login.", 3)
 	}
 	login.RefreshBlocked = true
-	if err := service.Store.Save(login); err != nil {
+	if err := service.saveLogin(login); err != nil {
 		return Login{}, err
 	}
 	requestedAt := service.Now()
@@ -113,8 +118,9 @@ func (service *Service) renewLogin(ctx context.Context, login Login) (Login, err
 		return Login{}, problem.New("invalid_refresh_response", "The renewal response changed the authorized target or permissions. Run zorveus login and revoke the old session from the dashboard.", 3)
 	}
 	replacement := loginFromTokens(login.APIOrigin, tokens, requestedAt)
+	replacement.OrganizationName = login.OrganizationName
 	replacement.DashboardOrigin = login.DashboardOrigin
-	if err := service.Store.Save(replacement); err != nil {
+	if err := service.saveLogin(replacement); err != nil {
 		return Login{}, problem.New("credential_save_failed", "The renewed credentials could not be saved. Run zorveus login and revoke the old session from the dashboard.", 3)
 	}
 	return replacement, nil
@@ -126,7 +132,7 @@ func (service *Service) Logout(ctx context.Context, expectedOrigin string) (Logo
 		return LogoutResult{}, err
 	}
 	defer unlock()
-	login, err := service.loadLogin(expectedOrigin)
+	login, err := service.loadLogin(ctx, LoginTarget{APIOrigin: expectedOrigin})
 	if errors.Is(err, ErrNoLogin) {
 		return LogoutResult{LoggedOut: true}, nil
 	}
@@ -139,25 +145,10 @@ func (service *Service) Logout(ctx context.Context, expectedOrigin string) (Logo
 	if err := service.revokeLogin(ctx, login); err != nil {
 		return LogoutResult{}, problem.New("logout_incomplete", "Could not revoke the login. Saved credentials were retained so you can retry logout. You can also revoke the session from the dashboard.", 1)
 	}
-	if err := service.Store.Delete(); err != nil {
-		return LogoutResult{}, problem.New("logout_incomplete", "The remote login was revoked, but the saved credentials could not be removed. Retry logout after unlocking your credential store.", 1)
+	if err := service.deleteLogin(login); err != nil {
+		return LogoutResult{}, problem.New("logout_incomplete", "The remote session was revoked, but local credential cleanup could not finish. Unlock your credential store and check its com.zorveus.cli entries.", 1)
 	}
 	return LogoutResult{LoggedOut: true}, nil
-}
-
-func (service *Service) loadLogin(expectedOrigin string) (Login, error) {
-	login, err := service.Store.Load()
-	if err != nil {
-		return Login{}, err
-	}
-	origin, err := api.CanonicalOrigin(login.APIOrigin, true)
-	if err != nil || origin != login.APIOrigin || login.ClientID != api.ClientID || login.Organization == "" || login.AccessToken == "" || login.ExpiresAt.IsZero() {
-		return Login{}, problem.New("invalid_saved_login", "The saved login is incomplete. Remove the current-login entry for com.zorveus.cli from your OS credential store, then log in again.", 3)
-	}
-	if expectedOrigin != "" && expectedOrigin != login.APIOrigin {
-		return Login{}, problem.New("target_mismatch", "The API origin differs from the saved login. Log in to that origin before using it.", 4)
-	}
-	return login, nil
 }
 
 func (service *Service) revokeLogin(ctx context.Context, login Login) error {

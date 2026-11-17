@@ -41,16 +41,16 @@ func TestApplyContinuesAfterRenewalFailsBetweenResourceCreations(t *testing.T) {
 		writer.WriteHeader(http.StatusUnauthorized)
 		return writer.Result(), nil
 	})
-	service.Auth.RequestLogin = func(_ context.Context, options auth.LoginOptions) error {
+	service.Auth.RequestLogin = func(_ context.Context, options auth.LoginOptions) (auth.LoginSummary, error) {
 		logins++
-		if options.ExpectedOrganization != "org_a" || options.ExpectedUser != "user_a" {
-			t.Fatal("apply lost the approved target during login")
+		if options.ExpectedOrganization != "" {
+			t.Fatal("browser sign-in was restricted instead of checking the target before the next write")
 		}
 		fresh := store.login
 		fresh.RefreshBlocked = false
 		fresh.RefreshToken = "fresh-refresh"
 		fresh.ExpiresAt = service.Auth.Now().Add(time.Hour)
-		return store.Save(fresh)
+		return auth.LoginSummary{APIOrigin: fresh.APIOrigin, Organization: fresh.Organization}, store.Save(fresh)
 	}
 	if _, err := service.Apply(context.Background(), "", path, true, false); err != nil {
 		t.Fatal(err)
@@ -79,8 +79,8 @@ func TestCanceledLoginBeforeCreationLeavesTheStepSafeToResume(t *testing.T) {
 		}
 		return time.Now()
 	}
-	service.Auth.RequestLogin = func(context.Context, auth.LoginOptions) error {
-		return problem.New("login_canceled", "Login canceled.", 3)
+	service.Auth.RequestLogin = func(context.Context, auth.LoginOptions) (auth.LoginSummary, error) {
+		return auth.LoginSummary{}, problem.New("login_canceled", "Login canceled.", 3)
 	}
 	_, err := service.Apply(context.Background(), "", path, true, false)
 	if problem.Safe(err).Code != "login_canceled" || len(backend.writes) != 0 {
@@ -90,5 +90,30 @@ func TestCanceledLoginBeforeCreationLeavesTheStepSafeToResume(t *testing.T) {
 	store.login.ExpiresAt = time.Now().Add(time.Hour)
 	if _, err := service.Apply(context.Background(), "", path, true, false); err != nil {
 		t.Fatalf("a request that was never sent blocked resumption: %v", err)
+	}
+}
+
+func TestApplySignsInWhenPlanOrganizationHasNoSavedLogin(t *testing.T) {
+	service, backend, previous, config, path := setup(t)
+	if _, err := service.Plan(context.Background(), "", config, path); err != nil {
+		t.Fatal(err)
+	}
+	accounts := &organizationStore{saved: auth.SavedLogins{Version: 1}}
+	service.Auth.Store = accounts
+	logins := 0
+	service.Auth.RequestLogin = func(_ context.Context, options auth.LoginOptions) (auth.LoginSummary, error) {
+		logins++
+		if options.ExpectedOrganization != "org_a" || options.APIOrigin != previous.login.APIOrigin || len(backend.writes) != 0 {
+			t.Fatal("apply lost its target or sent a write before sign-in")
+		}
+		accounts.saved.Logins = []auth.Login{previous.login}
+		return auth.LoginSummary{APIOrigin: previous.login.APIOrigin, Organization: previous.login.Organization}, nil
+	}
+	if _, err := service.Apply(context.Background(), "", path, true, false); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"POST /apps", "POST /app-connections/dashboard", "PATCH /app-connections/conn_1/cap", "POST /app-connections/dashboard", "POST /orgs/org_a/apps/app_a/routing-keys"}
+	if logins != 1 || !slices.Equal(backend.writes, want) {
+		t.Fatalf("missing-login apply was not resumed once: logins=%d writes=%v", logins, backend.writes)
 	}
 }

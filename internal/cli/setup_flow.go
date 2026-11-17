@@ -42,6 +42,7 @@ func (flow *setupFlow) prepareManifest(configuration manifest.SaaSOptions) (bool
 			}
 		}
 	}
+	configuration.OrganizationID = flow.identity.Organization
 	_, err := manifest.InitSaaS(flow.options.config, configuration)
 	return err == nil, err
 }
@@ -126,6 +127,7 @@ func (flow *setupFlow) reauthorize(cause error) error {
 		return cause
 	}
 	login := loginCommand(flow.settings, flow.dependencies, io.Discard, flow.stderr)
+	login.SetIn(flow.input.reader)
 	login.SetContext(flow.input.ctx)
 	if err := login.RunE(login, nil); err != nil {
 		return err

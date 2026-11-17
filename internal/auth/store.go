@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,64 +18,199 @@ import (
 var ErrNoLogin = errors.New("no saved login")
 
 type Login struct {
-	APIOrigin       string    `json:"api_origin"`
-	DashboardOrigin string    `json:"dashboard_origin,omitempty"`
-	ClientID        string    `json:"client_id"`
-	Organization    string    `json:"organization"`
-	AccessToken     string    `json:"access_token"`
-	RefreshToken    string    `json:"refresh_token,omitempty"`
-	ExpiresAt       time.Time `json:"expires_at"`
-	Scope           string    `json:"scope"`
-	RefreshBlocked  bool      `json:"refresh_blocked,omitempty"`
+	APIOrigin        string    `json:"api_origin"`
+	DashboardOrigin  string    `json:"dashboard_origin,omitempty"`
+	ClientID         string    `json:"client_id"`
+	Organization     string    `json:"organization"`
+	OrganizationName string    `json:"organization_name,omitempty"`
+	AccessToken      string    `json:"access_token"`
+	RefreshToken     string    `json:"refresh_token,omitempty"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	Scope            string    `json:"scope"`
+	RefreshBlocked   bool      `json:"refresh_blocked,omitempty"`
 }
 
 type Store interface {
-	Load() (Login, error)
-	Save(Login) error
-	Delete() error
+	Read() (SavedLogins, error)
+	Write(SavedLogins) error
 }
 
-type CredentialStore struct{}
+type LoginReference struct {
+	APIOrigin    string `json:"api_origin"`
+	Organization string `json:"organization"`
+}
+
+type SavedLogins struct {
+	Version int            `json:"version"`
+	Logins  []Login        `json:"logins"`
+	Default LoginReference `json:"default"`
+}
+
+type CredentialStore struct {
+	Directory string
+}
+
+type loginIndex struct {
+	Version int            `json:"version"`
+	Logins  []indexedLogin `json:"logins"`
+	Default LoginReference `json:"default"`
+}
+
+type indexedLogin struct {
+	APIOrigin    string `json:"api_origin"`
+	Organization string `json:"organization"`
+	Name         string `json:"name,omitempty"`
+}
 
 const credentialService = "com.zorveus.cli"
 const credentialAccount = "current-login"
 
-func (CredentialStore) Load() (Login, error) {
+func (store CredentialStore) Read() (SavedLogins, error) {
+	path, err := store.indexPath()
+	if err != nil {
+		return SavedLogins{}, err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return readLegacyLogin()
+	}
+	if err != nil {
+		return SavedLogins{}, credentialStoreError()
+	}
+	var index loginIndex
+	if json.Unmarshal(data, &index) != nil || index.Version != 1 {
+		return SavedLogins{}, invalidSavedLogins()
+	}
+	saved := SavedLogins{Version: 1, Logins: []Login{}, Default: index.Default}
+	for _, entry := range index.Logins {
+		target := LoginReference{APIOrigin: entry.APIOrigin, Organization: entry.Organization}
+		if _, duplicate := saved.find(target); duplicate {
+			return SavedLogins{}, invalidSavedLogins()
+		}
+		value, err := keyring.Get(credentialService, loginAccount(target))
+		if errors.Is(err, keyring.ErrNotFound) {
+			// Keep the organization selectable so login can replace a missing entry.
+			saved.Logins = append(saved.Logins, Login{APIOrigin: target.APIOrigin, Organization: target.Organization, OrganizationName: entry.Name})
+			continue
+		}
+		if err != nil {
+			return SavedLogins{}, credentialStoreError()
+		}
+		var login Login
+		if json.Unmarshal([]byte(value), &login) != nil || reference(login) != target {
+			return SavedLogins{}, invalidSavedLogins()
+		}
+		saved.Logins = append(saved.Logins, login)
+	}
+	return saved, nil
+}
+
+func readLegacyLogin() (SavedLogins, error) {
 	value, err := keyring.Get(credentialService, credentialAccount)
 	if errors.Is(err, keyring.ErrNotFound) {
-		return Login{}, ErrNoLogin
+		return SavedLogins{}, ErrNoLogin
 	}
 	if err != nil {
-		return Login{}, credentialStoreError()
+		return SavedLogins{}, credentialStoreError()
 	}
-	var login Login
-	if err := json.Unmarshal([]byte(value), &login); err != nil {
-		return Login{}, problem.New("invalid_saved_login", "The saved login is unreadable. Remove the current-login entry for com.zorveus.cli from your OS credential store, then log in again.", 3)
+	// Read the previous single-login format without losing that session.
+	var previous Login
+	if json.Unmarshal([]byte(value), &previous) != nil || previous.Organization == "" {
+		return SavedLogins{}, invalidSavedLogins()
 	}
-	return login, nil
+	return SavedLogins{Version: 1, Logins: []Login{previous}, Default: reference(previous)}, nil
 }
 
-func (CredentialStore) Save(login Login) error {
-	value, err := json.Marshal(login)
+func (store CredentialStore) Write(saved SavedLogins) error {
+	path, err := store.indexPath()
+	if err != nil {
+		return err
+	}
+	previous, err := store.Read()
+	if err != nil && !errors.Is(err, ErrNoLogin) {
+		return err
+	}
+	index := loginIndex{Version: 1, Logins: []indexedLogin{}, Default: saved.Default}
+	for _, login := range saved.Logins {
+		index.Logins = append(index.Logins, indexedLogin{APIOrigin: login.APIOrigin, Organization: login.Organization, Name: login.OrganizationName})
+	}
+	// The index contains no tokens. Stage it before changing credential entries.
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return credentialStoreError()
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".logins-*")
 	if err != nil {
 		return credentialStoreError()
 	}
-	if err := keyring.Set(credentialService, credentialAccount, string(value)); err != nil {
+	defer os.Remove(file.Name())
+	writeErr := json.NewEncoder(file).Encode(index)
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
 		return credentialStoreError()
 	}
+	for _, login := range saved.Logins {
+		if login.AccessToken == "" {
+			continue
+		}
+		value, err := json.Marshal(login)
+		if err != nil {
+			return credentialStoreError()
+		}
+		stored, err := keyring.Get(credentialService, loginAccount(reference(login)))
+		if err == nil && stored == string(value) {
+			continue
+		}
+		if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return credentialStoreError()
+		}
+		if err := keyring.Set(credentialService, loginAccount(reference(login)), string(value)); err != nil {
+			return credentialStoreError()
+		}
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return credentialStoreError()
+	}
+	// Remove credentials only after the index no longer refers to them.
+	for _, login := range previous.Logins {
+		if _, retained := saved.find(reference(login)); retained {
+			continue
+		}
+		err := keyring.Delete(credentialService, loginAccount(reference(login)))
+		if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return credentialStoreError()
+		}
+	}
+	// The old copy is no longer read once the organization index exists.
+	_ = keyring.Delete(credentialService, credentialAccount)
 	return nil
 }
 
-func (CredentialStore) Delete() error {
-	err := keyring.Delete(credentialService, credentialAccount)
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		return credentialStoreError()
+func (store CredentialStore) indexPath() (string, error) {
+	directory := store.Directory
+	if directory == "" {
+		configuration, err := os.UserConfigDir()
+		if err != nil {
+			return "", credentialStoreError()
+		}
+		directory = filepath.Join(configuration, "zorveus")
 	}
-	return nil
+	return filepath.Join(directory, "logins.json"), nil
+}
+
+func loginAccount(target LoginReference) string {
+	value, _ := json.Marshal(target)
+	return fmt.Sprintf("login-%x", sha256.Sum256(value))
+}
+
+func invalidSavedLogins() error {
+	return problem.New("invalid_saved_login", "The saved logins are unreadable. Check the Zorveus login index and com.zorveus.cli entries in your OS credential store.", 3)
 }
 
 func credentialStoreError() error {
-	return problem.New("credential_store_unavailable", "Could not access the OS credential store. Unlock your keychain or start your credential-store service, then retry. Credentials are never saved as plaintext.", 1)
+	return problem.New("credential_store_unavailable", "Could not read or save CLI login details. Unlock your OS credential store and check your user configuration directory permissions. Tokens are never saved as plaintext.", 1)
 }
 
 func LockCredentials(ctx context.Context) (func(), error) {

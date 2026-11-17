@@ -8,6 +8,10 @@ The [JSON Schema](../internal/manifest/schema/v1.json) defines fields, types, fo
 
 `version` is `1`, and `app` is required. Optional resource sections are `keys`, `routingKeys`, `serviceKeys`, and `providerCredentials`.
 
+The optional root field `organizationId` identifies the organization that owns the app and its resources. Setup, import, and successful apply record it. Plan, status, and retrieve use it to select the saved login. An explicit `--org` must match it. Older manifests can resolve the organization through their existing local state. Tokens are never stored in the manifest.
+
+Clone removes `organizationId` along with resource IDs. Promotion preserves the target organization's ID and never copies the source organization's ID.
+
 IDs contain 1 to 128 ASCII letters, digits, underscores, or hyphens, starting with a letter or digit. They are opaque resource identifiers. Offline validation checks syntax and duplicates. Later planning must verify the resource kind, existence, app, and organization. App-owned IDs require an existing `app.id`.
 
 An omitted ID requests creation. An explicit null or empty ID is invalid. A new app requires `name` and `allowedModels`. A new key requires `name`. A new router requires `name` and at least one member. Existing resources can omit display names to preserve them. Display names never identify resources.

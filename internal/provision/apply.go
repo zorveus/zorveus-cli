@@ -40,12 +40,25 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 	if !exists || plan.Version != 1 || !operationID.MatchString(plan.ID) || !filepath.IsAbs(plan.Config) {
 		return ApplyResult{}, problem.New("invalid_plan", "Provide a valid saved plan created by zorveus plan.", 2)
 	}
-	if _, err := manifest.Parse(plan.Manifest); err != nil {
+	document, err := manifest.Parse(plan.Manifest)
+	if err != nil {
 		return ApplyResult{}, problem.New("invalid_plan", "The saved plan contains an invalid manifest.", 2)
+	}
+	if document.OrganizationID() != "" && document.OrganizationID() != plan.Target.Org {
+		return ApplyResult{}, problem.New("invalid_plan", "The saved plan and its manifest refer to different organizations. Create a new plan.", 4)
 	}
 	if origin != "" && origin != plan.Target.Origin {
 		return ApplyResult{}, conflict()
 	}
+	if service.Auth.Organization != "" && service.Auth.Organization != plan.Target.Org {
+		return ApplyResult{}, problem.New("organization_mismatch", "--org differs from the saved plan's organization. Use its organization or create a separate plan.", 4)
+	}
+	// Rechecking an older manifest must use this plan's organization, not the default.
+	authentication := *service.Auth
+	authentication.Organization = plan.Target.Org
+	scoped := *service
+	scoped.Auth = &authentication
+	service = &scoped
 	if !allowDelete && slices.ContainsFunc(plan.Steps, func(step Step) bool { return step.Destructive && stepChanges(step) }) {
 		return ApplyResult{}, problem.New("destructive_acceptance_required", "This plan includes revocation, cap removal, or redirect removal. Pass --allow-delete as well as --yes after reviewing it.", 2)
 	}
@@ -350,6 +363,7 @@ func (run *execution) finish() error {
 	}
 	var document Fields
 	_ = json.Unmarshal(run.plan.Manifest, &document)
+	document.set("organizationId", run.plan.Target.Org)
 	desired.App.set("id", state.AppID)
 	document.set("app", desired.App)
 	if desired.Keys != nil {

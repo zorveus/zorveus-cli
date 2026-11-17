@@ -68,8 +68,22 @@ func runSetup(command *cobra.Command, settings *flags, dependencies Dependencies
 		return problem.New("config_read_failed", "The setup manifest must be a regular file in a readable directory.", 1)
 	}
 	if exists {
-		if _, err := manifest.Load(options.config); err != nil {
+		document, err := manifest.Load(options.config)
+		if err != nil {
 			return err
+		}
+		target, err := provision.ProjectTarget(options.config, settings.apiOrigin, document.OrganizationID())
+		if err != nil {
+			return err
+		}
+		if settings.organization != "" && target.Org != "" && settings.organization != target.Org {
+			return problem.New("organization_mismatch", "--org differs from the manifest's organization. Use its organization or select another manifest.", 4)
+		}
+		if target.Org != "" {
+			dependencies.Auth.Organization = target.Org
+		}
+		if target.Origin != "" {
+			settings.apiOrigin = target.Origin
 		}
 		if options.name != "" || len(options.plans) > 0 || command.Flags().Changed("credits-per-usd") || command.Flags().Changed("model") || options.routingKey {
 			return problem.New("config_exists", "Setup preserves existing manifests. Edit their settings, then run setup again to review and apply the changes.", 2)
@@ -104,7 +118,7 @@ func runSetup(command *cobra.Command, settings *flags, dependencies Dependencies
 	if err := ui.field("API", identity.APIOrigin); err != nil {
 		return err
 	}
-	if err := ui.field("Organization", identity.Organization); err != nil {
+	if err := ui.field("Organization", auth.OrganizationLabel(identity.OrganizationName, identity.Organization)); err != nil {
 		return err
 	}
 	settings.apiOrigin = identity.APIOrigin
@@ -136,10 +150,11 @@ func setupLogin(command *cobra.Command, settings *flags, dependencies Dependenci
 	if err == nil {
 		return identity, nil
 	}
-	if !interactive || !errors.Is(err, auth.ErrNoLogin) {
+	if !interactive || !errors.Is(err, auth.ErrNoLogin) && problem.Safe(err).Code != "login_required" {
 		return identity, err
 	}
 	login := loginCommand(settings, dependencies, io.Discard, stderr)
+	login.SetIn(command.InOrStdin())
 	login.SetContext(command.Context())
 	if err := login.RunE(login, nil); err != nil {
 		return identity, err

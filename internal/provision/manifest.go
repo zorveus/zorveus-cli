@@ -17,7 +17,7 @@ func (desired *Manifest) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	*desired = Manifest{Version: document.Version(), resourceNames: map[string][]string{}}
+	*desired = Manifest{Version: document.Version(), OrganizationID: document.OrganizationID(), resourceNames: map[string][]string{}}
 	if err := json.Unmarshal(raw["app"], &desired.App); err != nil {
 		return err
 	}
