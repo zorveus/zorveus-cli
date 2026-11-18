@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zorveus/zorveus-cli/internal/problem"
-	"github.com/zorveus/zorveus-cli/internal/provision"
 )
 
 func retrieveCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *cobra.Command {
@@ -26,7 +25,7 @@ func retrieveCommand(settings *flags, dependencies Dependencies, stdout io.Write
 		},
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			service := provision.Service{Auth: dependencies.Auth, Secrets: dependencies.Secrets}
+			service := provisionService(settings, dependencies)
 			result, err := service.Retrieve(command.Context(), settings.apiOrigin, config, arguments[0])
 			if err != nil {
 				return err

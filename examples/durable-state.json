@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "_state": {
+    "backend": "s3",
+    "bucket": "zorveus-state",
+    "key": "apps/assistant/prod.json",
+    "region": "us-east-1"
+  },
+  "app": {
+    "name": "Production assistant",
+    "allowedModels": ["*"]
+  },
+  "keys": {
+    "backend": {
+      "name": "Backend",
+      "cap": {
+        "amount": "100",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  }
+}

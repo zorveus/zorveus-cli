@@ -1,0 +1,28 @@
+{
+  "_state": {
+    "backend": "s3",
+    "bucket": "zor",
+    "key": "cli-tests/local/s3-test-1.json",
+    "region": "us-west-1"
+  },
+  "app": {
+    "allowedModels": [
+      "*"
+    ],
+    "id": "app_01b12f87d09f44b3bb6bfb28f0eacf8a",
+    "name": "Local S3 testt"
+  },
+  "keys": {
+    "backend": {
+      "cap": {
+        "amount": "10",
+        "currency": "USD",
+        "period": "monthly"
+      },
+      "id": "aconn_210cb60bff36423c9221631f30092b29",
+      "name": "Local test backend"
+    }
+  },
+  "organizationId": "org_17f8988d18a54098b69118e3797dad26",
+  "version": 1
+}

@@ -8,11 +8,15 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/api"
 	"github.com/zorveus/zorveus-cli/internal/auth"
 	"github.com/zorveus/zorveus-cli/internal/problem"
+	"github.com/zorveus/zorveus-cli/internal/statestore"
 )
 
 type Service struct {
-	Auth    *auth.Service
-	Secrets SecretStore
+	Auth           *auth.Service
+	Secrets        SecretStore
+	StateConfig    *statestore.Config
+	BackendFactory statestore.Factory
+	workspace      *durableWorkspace
 }
 
 type gateway struct {

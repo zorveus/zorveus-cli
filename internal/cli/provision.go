@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zorveus/zorveus-cli/internal/problem"
 	"github.com/zorveus/zorveus-cli/internal/provision"
 )
 
@@ -21,7 +22,7 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 			if !command.Flags().Changed("out") {
 				output = strings.TrimSuffix(config, filepath.Ext(config)) + ".plan.json"
 			}
-			service := provision.Service{Auth: dependencies.Auth, Secrets: dependencies.Secrets}
+			service := provisionService(settings, dependencies)
 			result, err := service.PlanFrom(command.Context(), settings.apiOrigin, config, output, source, keepNames)
 			if err != nil {
 				return err
@@ -45,20 +46,36 @@ func planCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *
 }
 
 func applyCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *cobra.Command {
-	var plan string
-	var accepted, allowDelete bool
+	var plan, config string
+	var accepted, allowDelete, resume bool
 	command := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply a reviewed saved plan and record resource IDs",
 		Args:  noArguments,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			service := provision.Service{Auth: dependencies.Auth, Secrets: dependencies.Secrets}
-			result, err := service.Apply(command.Context(), settings.apiOrigin, plan, accepted, allowDelete)
+			service := provisionService(settings, dependencies)
+			var result provision.ApplyResult
+			var err error
+			if resume {
+				if command.Flags().Changed("plan") {
+					return problem.New("invalid_arguments", "Use --resume without --plan. It loads the unfinished operation from durable state.", 2)
+				}
+				if config == "" {
+					config = "zorveus.json"
+				}
+				result, err = service.Resume(command.Context(), settings.apiOrigin, config, accepted, allowDelete)
+			} else {
+				result, err = service.ApplyAt(command.Context(), settings.apiOrigin, plan, config, accepted, allowDelete)
+			}
 			if err != nil {
 				return err
 			}
 			if settings.jsonOutput {
 				return writeJSON(stdout, command.CommandPath(), result)
+			}
+			if result.Destroyed {
+				_, err := fmt.Fprintf(stdout, "Destroyed deployment. App: %s\nManifest and tracking retained: %s\n", terminalText(result.AppID), terminalText(result.Config))
+				return outputError(err)
 			}
 			if _, err := fmt.Fprintf(stdout, "Applied plan. App: %s\nUpdated manifest: %s\n", terminalText(result.AppID), terminalText(result.Config)); err != nil {
 				return outputError(err)
@@ -72,6 +89,8 @@ func applyCommand(settings *flags, dependencies Dependencies, stdout io.Writer) 
 		},
 	}
 	command.Flags().StringVar(&plan, "plan", "zorveus.plan.json", "Saved plan to apply or resume")
+	command.Flags().StringVar(&config, "config", "", "Manifest path on this runner; required with --resume for a non-default manifest")
+	command.Flags().BoolVar(&resume, "resume", false, "Resume the unfinished apply saved in durable state")
 	command.Flags().BoolVar(&accepted, "yes", false, "Confirm the reviewed changes")
 	command.Flags().BoolVar(&allowDelete, "allow-delete", false, "Also allow planned revocations and cap removal")
 	_ = command.MarkFlagFilename("plan", "json")

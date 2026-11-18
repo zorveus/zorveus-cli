@@ -8,7 +8,6 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/auth"
 	"github.com/zorveus/zorveus-cli/internal/manifest"
 	"github.com/zorveus/zorveus-cli/internal/problem"
-	"github.com/zorveus/zorveus-cli/internal/provision"
 )
 
 type setupFlow struct {
@@ -48,7 +47,7 @@ func (flow *setupFlow) prepareManifest(configuration manifest.SaaSOptions) (bool
 }
 
 func (flow *setupFlow) reviewAndApply() error {
-	service := provision.Service{Auth: flow.dependencies.Auth, Secrets: flow.dependencies.Secrets}
+	service := provisionService(flow.settings, flow.dependencies)
 	plan, err := setupPlan(flow.command, &service, flow.identity.APIOrigin, flow.options.config)
 	if err != nil && flow.interactive && problem.Safe(err).Code == "authorization_required" {
 		if err := flow.reauthorize(err); err != nil {

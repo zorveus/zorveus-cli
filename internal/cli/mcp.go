@@ -25,6 +25,7 @@ func mcpCommand(settings *flags, dependencies Dependencies, stdout, stderr io.Wr
 			server, err := mcpserver.New(mcpserver.Options{
 				Auth: dependencies.Auth, Secrets: dependencies.Secrets, APIOrigin: settings.apiOrigin,
 				Directory: directory, Logger: logger,
+				StateConfig: settings.stateBackend, BackendFactory: dependencies.StateBackendFactory,
 			})
 			if err != nil {
 				return err

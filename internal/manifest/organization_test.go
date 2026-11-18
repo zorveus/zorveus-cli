@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,11 +17,11 @@ func TestOrganizationIDIsOptionalButMustBeAnID(t *testing.T) {
 }
 
 func TestCloneClearsOrganizationAndPromotionPreservesTargetOrganization(t *testing.T) {
-	dev, err := Parse([]byte(`{"version":1,"organizationId":"org_dev","app":{"id":"app_dev","name":"Development","allowedModels":["*"]}}`))
+	dev, err := Parse([]byte(`{"version":1,"organizationId":"org_dev","_state":{"backend":"s3","bucket":"state","key":"dev.json","region":"us-east-1"},"app":{"id":"app_dev","name":"Development","allowedModels":["*"]}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	prod, err := Parse([]byte(`{"version":1,"organizationId":"org_prod","app":{"id":"app_prod","name":"Production","allowedModels":["*"]}}`))
+	prod, err := Parse([]byte(`{"version":1,"organizationId":"org_prod","_state":{"backend":"s3","bucket":"state","key":"prod.json","region":"us-east-1"},"app":{"id":"app_prod","name":"Production","allowedModels":["*"]}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,6 +32,9 @@ func TestCloneClearsOrganizationAndPromotionPreservesTargetOrganization(t *testi
 	document, err := Parse(promoted)
 	if err != nil || document.OrganizationID() != "org_prod" || document.AppID() != "app_prod" {
 		t.Fatalf("promotion copied the source organization or app ID: %v", err)
+	}
+	if !bytes.Contains(promoted, []byte(`"prod.json"`)) || bytes.Contains(promoted, []byte(`"dev.json"`)) {
+		t.Fatal("promotion replaced the target state backend")
 	}
 	directory := t.TempDir()
 	source, target := filepath.Join(directory, "source.json"), filepath.Join(directory, "clone.json")
@@ -44,5 +48,9 @@ func TestCloneClearsOrganizationAndPromotionPreservesTargetOrganization(t *testi
 	cloned, err := Load(target)
 	if err != nil || cloned.OrganizationID() != "" || cloned.AppID() != "" {
 		t.Fatalf("clone retained the source deployment identity: %v", err)
+	}
+	clonedData, _ := cloned.Bytes()
+	if bytes.Contains(clonedData, []byte(`"_state"`)) {
+		t.Fatal("clone retained the source state backend")
 	}
 }

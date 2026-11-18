@@ -19,6 +19,19 @@
     "organizationId": {
       "$ref": "#/$defs/id"
     },
+    "_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "bucket", "key"],
+      "properties": {
+        "backend": {"const": "s3"},
+        "bucket": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "region": {"type": "string", "minLength": 1},
+        "endpoint": {"type": "string", "minLength": 1},
+        "usePathStyle": {"type": "boolean"}
+      }
+    },
     "app": {
       "$ref": "#/$defs/app"
     },

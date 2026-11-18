@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -19,17 +20,19 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/problem"
 	"github.com/zorveus/zorveus-cli/internal/provision"
 	"github.com/zorveus/zorveus-cli/internal/selfupdate"
+	"github.com/zorveus/zorveus-cli/internal/statestore"
 )
 
 type Dependencies struct {
-	Auth             *auth.Service
-	Secrets          provision.SecretStore
-	Stdin            io.Reader
-	InputIsTerminal  bool
-	OutputIsTerminal bool
-	ErrorIsTerminal  bool
-	OpenBrowser      func(context.Context, string) error
-	UpdateCLI        func(context.Context, string) (selfupdate.Result, error)
+	Auth                *auth.Service
+	Secrets             provision.SecretStore
+	Stdin               io.Reader
+	InputIsTerminal     bool
+	OutputIsTerminal    bool
+	ErrorIsTerminal     bool
+	OpenBrowser         func(context.Context, string) error
+	UpdateCLI           func(context.Context, string) (selfupdate.Result, error)
+	StateBackendFactory statestore.Factory
 }
 
 const defaultLoginScopes = "apps:read apps:create apps:update apps:delete apps:rotate_secret " +
@@ -48,6 +51,8 @@ type flags struct {
 	organization       string
 	logLevel           string
 	noColor            bool
+	stateConfigFile    string
+	stateBackend       *statestore.Config
 }
 
 type resultEnvelope struct {
@@ -75,6 +80,17 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		PersistentPreRunE: func(command *cobra.Command, arguments []string) error {
+			if settings.stateConfigFile != "" {
+				data, err := os.ReadFile(settings.stateConfigFile)
+				if err != nil {
+					return problem.New("state_config_unavailable", "Could not read --state-config. Provide a JSON backend configuration file without credentials.", 2)
+				}
+				config, err := statestore.ParseConfig(data)
+				if err != nil {
+					return err
+				}
+				settings.stateBackend = &config
+			}
 			if dependencies.Auth != nil {
 				dependencies.Auth.Organization = settings.organization
 			}
@@ -122,6 +138,7 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.PersistentFlags().StringVar(&settings.apiOrigin, "api-url", "", "Override the API origin; login defaults to https://api.zorveus.com")
 	root.PersistentFlags().StringVar(&settings.organization, "org", "", "Organization ID; otherwise use the project, only saved organization, or default")
 	root.PersistentFlags().StringVar(&settings.logLevel, "log-level", "info", "Diagnostic level: debug, info, warn, error")
+	root.PersistentFlags().StringVar(&settings.stateConfigFile, "state-config", "", "Optional JSON backend configuration; must match the manifest's _state block")
 	root.AddCommand(loginCommand(settings, dependencies, stdout, stderr))
 	root.AddCommand(appsCommand(settings, dependencies, stdout))
 	root.AddCommand(whoamiCommand(settings, dependencies, stdout))
@@ -134,11 +151,13 @@ func Execute(ctx context.Context, arguments []string, stdout, stderr io.Writer, 
 	root.AddCommand(promoteCommand(settings, stdout))
 	root.AddCommand(planCommand(settings, dependencies, stdout))
 	root.AddCommand(applyCommand(settings, dependencies, stdout))
+	root.AddCommand(destroyCommand(settings, dependencies, stdout, stderr))
 	root.AddCommand(importCommand(settings, dependencies, stdout))
 	root.AddCommand(statusCommand(settings, dependencies, stdout))
 	root.AddCommand(serviceKeysCommand(settings, dependencies, stdout))
 	root.AddCommand(mcpCommand(settings, dependencies, stdout, stderr))
 	root.AddCommand(updateCommand(settings, dependencies, stdout, stderr))
+	root.AddCommand(stateCommand(settings, dependencies, stdout))
 	settings.jsonOutput = requestedJSON(arguments)
 	command, err := root.ExecuteContextC(ctx)
 	if err == nil {

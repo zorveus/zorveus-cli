@@ -15,12 +15,15 @@ Select a use case to jump to its complete JSON and explanation. The separate JSO
 | [OAuth and consent](#oauth-and-consent) | [oauth-wallet.json](oauth-wallet.json) | A public OAuth app with a callback URL and consent cap defaults |
 | [OpenAI BYOK](#openai-byok) | [byok-openai.json](byok-openai.json) | An app, a capped inference key, and an organization provider credential |
 | [Service key](#service-key) | [service-key-backend.json](service-key-backend.json) | An app and an organization service key with product-user read/write permissions |
+| [Durable state](#durable-state) | [durable-state.json](durable-state.json) | An app and capped inference key whose IDs and apply progress use S3-compatible storage |
 
 For the commands shared by every example, see [Try an example](#try-an-example). For model lists, amounts, and routing aliases, see [Customize the configuration](#customize-the-configuration).
 
 To carry changes into an existing production app, see [Promote an example to production](#promote-an-example-to-production).
 
 ## Try an example
+
+The [durable-state example](#durable-state) also requires a bucket, storage credentials, and one-time state initialization before planning.
 
 Start with `internal-tool.json` if you want an inference key. Start with `minimal.json` if you only want to test creating and updating an app.
 
@@ -42,7 +45,7 @@ zorveus status
 zorveus plan
 ```
 
-Apply writes the created resource IDs into your copy of the manifest. Keep those IDs when making updates. The last plan should report no changes. Applying another fresh copy without IDs requests new resources.
+Apply writes the created resource IDs into your copy of the manifest. Keep those IDs when making updates. The last plan should report no changes. With the default local backend, applying a fresh copy in another project requests new resources. A configured durable backend restores existing IDs from shared state.
 
 Generated secrets are saved in your OS credential store; apply reports their account names. See [review and apply changes](../README.md#review-and-apply-changes) for retrieval and recovery details.
 
@@ -71,6 +74,50 @@ Select the production organization during login. Plan leaves both files unchange
 `keys.backend` matches `keys.backend`, and `routingKeys.primary` matches `routingKeys.primary`. Keep those object names stable across environments. The `--keep-names` flag preserves existing production display names. Omit it to copy source names too. With the flag, new entries use the source name unless their target entry already has a name. Removing a managed key or router from an explicit object can propose revocation, requiring `--allow-delete` during apply.
 
 See the [cross-app planning guide](../docs/promotion.md) for complete examples and credential rules.
+
+## Durable state
+
+Use [durable-state.json](durable-state.json) when the same app is managed from several checkouts or runners. It creates an app and a monthly USD 100 inference key, and uses one S3 object for resource IDs, locking, and apply progress.
+
+Replace the bucket, key, and region with your storage settings. Make AWS SDK credentials available through its normal environment, configuration, or workload role. For another service, add its `endpoint` and, if required, `usePathStyle`.
+
+```json
+{
+  "version": 1,
+  "_state": {
+    "backend": "s3",
+    "bucket": "zorveus-state",
+    "key": "apps/assistant/prod.json",
+    "region": "us-east-1"
+  },
+  "app": {
+    "name": "Production assistant",
+    "allowedModels": ["*"]
+  },
+  "keys": {
+    "backend": {
+      "name": "Backend",
+      "cap": {
+        "amount": "100",
+        "currency": "USD",
+        "period": "monthly"
+      }
+    }
+  }
+}
+```
+
+After copying the JSON into your project as `zorveus.json`, initialize its backend once:
+
+```sh
+zorveus state init
+zorveus plan
+zorveus apply --plan zorveus.plan.json --yes
+```
+
+If the manifest already has completed local tracking, review it and use `state init --copy-local`. Other checkouts use the same bucket and key. Do not initialize a different state object for every CI run.
+
+This stores state, not management login tokens or generated secrets. See the [durable-state guide](../docs/durable-state.md) for recovery, locks, supported endpoints, and current CI authentication requirements.
 
 ## Minimal app
 

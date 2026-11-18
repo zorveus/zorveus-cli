@@ -53,6 +53,8 @@ Replace both paths. Use the installed executable, or `bin/zorveus` from a local 
 
 The server normally uses the saved login's API origin. Add `--local` to the server arguments to require the local API, or use `--api-url` with the existing CLI origin rules.
 
+Manifest tools also honor an S3-compatible `_state` backend. Initialize it with `zorveus state init` in a terminal first. You can pass `--state-config` in the server arguments for a separate backend file. State inspection, backups, manual unlocking, and `apply --resume` remain terminal commands. See the [durable-state guide](durable-state.md).
+
 For BYOK, make the manifest's `secretFromEnv` variables available to the MCP process when your client launches it. An export in an unrelated terminal may not reach an editor or desktop client. The CLI does not load `.env` files automatically. Pass environment-variable names in the manifest, never secret values in tool arguments.
 
 ## Inspect your account and prepare a manifest

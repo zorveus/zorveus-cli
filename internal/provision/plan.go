@@ -17,8 +17,8 @@ func (service *Service) Plan(ctx context.Context, origin, config, output string)
 	return service.PlanFrom(ctx, origin, config, output, "", false)
 }
 
-func (service *Service) PlanFrom(ctx context.Context, origin, config, output, source string, keepNames bool) (PlanResult, error) {
-	config, err := filepath.Abs(config)
+func (service *Service) PlanFrom(ctx context.Context, origin, config, output, source string, keepNames bool) (result PlanResult, err error) {
+	config, err = filepath.Abs(config)
 	if err != nil {
 		return PlanResult{}, storageError()
 	}
@@ -27,6 +27,11 @@ func (service *Service) PlanFrom(ctx context.Context, origin, config, output, so
 		return PlanResult{}, err
 	}
 	defer unlock()
+	service, close, err := service.openWorkspace(ctx, config, nil)
+	if err != nil {
+		return PlanResult{}, err
+	}
+	defer closeWorkspace(close, &err)
 	if err := requireFinishedApply(config); err != nil {
 		return PlanResult{}, err
 	}
@@ -60,10 +65,10 @@ func savePlan(path string, plan Plan) error {
 		return err
 	}
 	if exists {
-		if previous.Version != 1 || !operationID.MatchString(previous.ID) || !filepath.IsAbs(previous.Config) {
+		if previous.Version != 1 || !operationID.MatchString(previous.ID) || !absolutePlanPath(previous.Config) {
 			return problem.New("invalid_plan_output", "The output file is not a saved Zorveus plan. Choose another --out path.", 2)
 		}
-		if previous.Config != plan.Config {
+		if previous.Config != plan.Config && (plan.RemoteStateID == "" || previous.RemoteStateID != plan.RemoteStateID) {
 			return problem.New("invalid_plan_output", "The output plan belongs to a different manifest. Use a separate --out filename.", 2)
 		}
 	}
@@ -79,7 +84,7 @@ func (service *Service) buildFrom(ctx context.Context, origin, config, source st
 	if keepNames && source == "" {
 		return Plan{}, problem.New("invalid_arguments", "Use --keep-names with --from to preserve target display names.", 2)
 	}
-	desired, original, canonical, err := loadManifest(config)
+	desired, original, canonical, err := service.planningManifest(config)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -134,6 +139,20 @@ func (service *Service) buildFrom(ctx context.Context, origin, config, source st
 		return Plan{}, err
 	}
 	plan := Plan{Version: 1, ID: newID(), Target: remote.target, Config: config, ConfigDigest: digest(original), StateDigest: digest(stateBytes), Manifest: canonical, Steps: []Step{}, Bindings: map[string]string{}}
+	if state.Destroyed {
+		plan.DestroyedIDs, err = service.destroyedResourceIDs(config, state)
+		if err != nil {
+			return Plan{}, err
+		}
+		// Deleted resources remain in history, but no longer belong to the new deployment.
+		state.Keys, state.Routers = map[string]string{}, []string{}
+	}
+	if workspace := service.workspace; workspace != nil {
+		plan.RemoteStateID = workspace.session.Document.ID
+		plan.RemoteRevision = workspace.session.Document.Revision
+		config := workspace.config
+		plan.StateBackend = &config
+	}
 	plan.Source, plan.SourceDigest, plan.KeepNames = source, sourceDigest, keepNames
 	models, err := plan.planApp(remote, desired.App)
 	if err != nil {
@@ -406,7 +425,7 @@ func readState(config string, target Target, appID string) (State, []byte, error
 		message := fmt.Sprintf("Saved state belongs to organization %q, but this command selected organization %q. Select the saved organization with --org or use a separate manifest.", state.Target.Org, target.Org)
 		return state, nil, problem.New("state_target_mismatch", message, 4)
 	}
-	if state.AppID != appID {
+	if state.AppID != appID && !(state.Destroyed && appID == "") {
 		message := fmt.Sprintf("%s has app.id %q, but its saved state belongs to app %q. Use the matching manifest or run zorveus setup with this manifest to review recovery options.", filepath.Base(config), appID, state.AppID)
 		if appID == "" {
 			message = fmt.Sprintf("%s has no app.id, so it describes a new app. Its saved state in %s still belongs to app %q. Run zorveus setup with this manifest to choose an existing configuration or start a new app.", filepath.Base(config), statePath(config), state.AppID)
@@ -423,6 +442,20 @@ func stepChanges(step Step) bool {
 func stepScopes(step Step) []string {
 	scopes := []string{"apps:read"}
 	switch step.Kind {
+	case "delete_app":
+		if stepChanges(step) {
+			scopes = append(scopes, "apps:delete")
+		}
+	case "revoke_service":
+		scopes = append(scopes, "service_keys:read")
+		if stepChanges(step) {
+			scopes = append(scopes, "service_keys:revoke")
+		}
+	case "delete_provider":
+		scopes = append(scopes, "provider_credentials:read")
+		if stepChanges(step) {
+			scopes = append(scopes, "provider_credentials:write")
+		}
 	case "create_app", "app_profile", "app_models", "app_redirect_add", "app_redirect_remove", "app_redirects":
 		if stepChanges(step) {
 			if step.Kind == "create_app" {

@@ -34,6 +34,7 @@ Expired and revoked keys are not updated, rotated, or reactivated. Removing a ma
 | Create | `POST /provider-credentials?org_id=...` | `provider_credentials:write` |
 | Update metadata | `PATCH /provider-credentials/{id}?org_id=...` | `provider_credentials:write` |
 | Rotate secret | `POST /provider-credentials/{id}/rotate?org_id=...` | `provider_credentials:write` |
+| Delete the stored credential | `DELETE /provider-credentials/{id}?org_id=...` | `provider_credentials:write` |
 
 Metadata updates send a nonempty subset of `credential_name`, `routing_mode`, `default_model_policy`, and `provider_config`. Omitted fields are preserved. `provider_config` replaces the whole object; explicit `null` clears it only where the provider allows an empty configuration. Required Azure and Vertex settings are checked before writes, including when planning resolves the provider from an existing ID.
 
@@ -58,3 +59,11 @@ App `oauth.clientType` and `allowedScopes` are creation-only. Existing values ma
 Consent defaults, app pricing defaults, credit conversion rates, and redirect additions/removals continue to use existing app APIs.
 
 No backend alias fields, routing-group IDs, session endpoint, manifest storage, or server-side apply state is needed.
+
+## App deletion recovery
+
+`zorveus destroy` uses the existing `DELETE /apps/{app_id}` route with `apps:delete`, followed by a confirmed `app_id` and `deleted: true` response. Normal destruction needs no backend change.
+
+The backend currently excludes deleted apps from app lookup and deletion. If the deletion response is lost, a resumed operation can receive an access-denied response and cannot safely conclude that deletion succeeded.
+
+To support recovery for this case, the existing DELETE route would need to return a successful deletion confirmation for an already deleted app after verifying its organization, the caller's current role, and delegated access restrictions. Deleted rows must remain hidden from unauthorized callers. A GET access-denied response alone must not count as confirmation. This is a backend follow-up request; the CLI implementation does not change backend source or policy.

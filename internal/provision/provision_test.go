@@ -20,7 +20,7 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/problem"
 )
 
-const fullScope = "apps:read apps:create apps:update apps:rotate_secret app_connections:read app_connections:write app_connections:revoke routing_keys:read routing_keys:write caps:app_write caps:org_write service_keys:read service_keys:write service_keys:revoke provider_credentials:read provider_credentials:write"
+const fullScope = "apps:read apps:create apps:update apps:delete apps:rotate_secret app_connections:read app_connections:write app_connections:revoke routing_keys:read routing_keys:write caps:app_write caps:org_write service_keys:read service_keys:write service_keys:revoke provider_credentials:read provider_credentials:write"
 
 const newManifest = `{
   "app": {
@@ -105,6 +105,9 @@ type fakeBackend struct {
 	capReadDelay                int
 	pendingCapReads             map[string]int
 	capReadBackAmount           string
+	failDestroyPath             string
+	loseDestroyResponsePath     string
+	appCreations                int
 }
 
 func (backend *fakeBackend) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -130,28 +133,41 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		switch {
 		case path == "/me":
 			_ = json.NewEncoder(writer).Encode(map[string]any{"user": map[string]string{"user_id": "user_a", "email": "user@example.test"}, "session": map[string]any{"authenticated": true, "expires_at": time.Now().Add(time.Hour)}, "orgs": []map[string]string{{"org_id": "org_a"}}})
-		case path == "/apps/app_a":
+		case strings.HasPrefix(path, "/apps/"):
+			if backend.app != nil && path != "/apps/"+backend.app.text("app_id") {
+				http.NotFound(writer, request)
+				return
+			}
+			if backend.app != nil && backend.app.text("status") == "deleted" {
+				writer.WriteHeader(http.StatusForbidden)
+				_, _ = io.WriteString(writer, `{"detail":{"code":"zorveus_app_not_found"}}`)
+				return
+			}
 			if backend.app == nil {
 				http.NotFound(writer, request)
 				return
 			}
 			_ = json.NewEncoder(writer).Encode(map[string]any{"app": backend.app})
 		case path == "/app-connections":
-			if request.URL.Query().Get("org_id") != "org_a" || request.URL.Query().Get("app_id") != "app_a" || request.URL.Query().Get("connection_type") != "org_programmatic" {
+			if request.URL.Query().Get("org_id") != "org_a" || request.URL.Query().Get("app_id") != backend.app.text("app_id") || request.URL.Query().Get("connection_type") != "org_programmatic" {
 				backend.t.Fatal("incorrect connection list target")
 			}
 			connections := []Fields{}
 			for _, connection := range backend.connections {
-				connections = append(connections, connection)
+				if connection.text("app_id") == request.URL.Query().Get("app_id") {
+					connections = append(connections, connection)
+				}
 			}
 			_ = json.NewEncoder(writer).Encode(map[string]any{"app_connections": connections})
 		case path == "/orgs/org_a/routing-keys":
-			if request.URL.Query().Get("app_id") != "app_a" {
+			if request.URL.Query().Get("app_id") != backend.app.text("app_id") {
 				backend.t.Fatal("incorrect routing list target")
 			}
 			routers := []Fields{}
 			for _, router := range backend.routers {
-				routers = append(routers, router)
+				if router.text("app_id") == request.URL.Query().Get("app_id") {
+					routers = append(routers, router)
+				}
 			}
 			_ = json.NewEncoder(writer).Encode(map[string]any{"items": routers})
 		case path == "/orgs/org_a/service-keys":
@@ -202,6 +218,11 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	backend.writes = append(backend.writes, request.Method+" "+path)
+	if path == backend.failDestroyPath {
+		backend.failDestroyPath = ""
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	var payload Fields
 	if request.Body != nil {
 		_ = json.NewDecoder(request.Body).Decode(&payload)
@@ -213,7 +234,12 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 			backend.t.Fatal("incorrect app owner")
 		}
 		backend.app = payload
-		backend.app.set("app_id", "app_a")
+		backend.appCreations++
+		appID := "app_a"
+		if backend.appCreations > 1 {
+			appID = fmt.Sprintf("app_%d", backend.appCreations)
+		}
+		backend.app.set("app_id", appID)
 		backend.app.set("status", "active")
 		if !backend.app.has("allowed_scopes") {
 			backend.app.set("allowed_scopes", []string{"inference:read", "inference:write"})
@@ -231,13 +257,21 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		if backend.app.text("client_type") == "public" {
 			response = map[string]any{"app": backend.app, "client_secret": nil}
 		}
-	case path == "/apps/app_a/client-secret/rotate":
-		response = map[string]any{"app_id": "app_a", "client_secret": "private-rotated-app-secret"}
-	case path == "/apps/app_a" || path == "/apps/app_a/models":
+	case path == "/apps/"+backend.app.text("app_id")+"/client-secret/rotate":
+		response = map[string]any{"app_id": backend.app.text("app_id"), "client_secret": "private-rotated-app-secret"}
+	case path == "/apps/"+backend.app.text("app_id") && request.Method == http.MethodDelete:
+		backend.app.set("status", "deleted")
+		for _, connection := range backend.connections {
+			if connection.text("app_id") == backend.app.text("app_id") {
+				connection.set("status", "revoked")
+			}
+		}
+		response = map[string]any{"app_id": backend.app.text("app_id"), "deleted": true}
+	case path == "/apps/"+backend.app.text("app_id") || path == "/apps/"+backend.app.text("app_id")+"/models":
 		for name, value := range payload {
 			backend.app[name] = value
 		}
-	case strings.HasPrefix(path, "/apps/app_a/redirect-uris"):
+	case strings.HasPrefix(path, "/apps/"+backend.app.text("app_id")+"/redirect-uris"):
 		var redirects []Fields
 		_ = json.Unmarshal(backend.app["redirect_uris"], &redirects)
 		if request.Method == http.MethodPost {
@@ -316,6 +350,13 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		backend.providerVersions++
 		backend.providers[id].set("active_secret_version_id", fmt.Sprintf("version_%d", backend.providerVersions))
 		response = map[string]any{"provider_credential": backend.providers[id], "rotated": true}
+	case strings.HasPrefix(path, "/provider-credentials/") && request.Method == http.MethodDelete:
+		if request.URL.Query().Get("org_id") != "org_a" {
+			backend.t.Fatal("missing provider deletion organization")
+		}
+		id := strings.Split(path, "/")[2]
+		backend.providers[id].set("status", "deleted")
+		response = map[string]any{"provider_credential": backend.providers[id], "deleted": true}
 	case strings.HasPrefix(path, "/provider-credentials/") && request.Method == http.MethodPatch:
 		if request.URL.Query().Get("org_id") != "org_a" {
 			backend.t.Fatal("missing provider update organization")
@@ -330,12 +371,12 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		}
 		response = credential
 	case path == "/app-connections/dashboard":
-		if payload.text("org_id") != "org_a" || payload.text("app_id") != "app_a" {
+		if payload.text("org_id") != "org_a" || payload.text("app_id") != backend.app.text("app_id") {
 			backend.t.Fatal("incorrect connection target")
 		}
 		id := fmt.Sprintf("conn_%d", len(backend.connections)+1)
 		keyID := "key_" + id
-		connection := fields(map[string]any{"app_connection_id": id, "app_id": "app_a", "selected_org_id": "org_a", "connection_type": "org_programmatic", "status": "active", "credit_mode": payload.text("credit_mode"), "overrun_policy": payload.text("overrun_policy"), "approved_scopes": payload.strings("approved_scopes"), "allowed_models": payload.strings("allowed_models")})
+		connection := fields(map[string]any{"app_connection_id": id, "app_id": payload.text("app_id"), "selected_org_id": "org_a", "connection_type": "org_programmatic", "status": "active", "credit_mode": payload.text("credit_mode"), "overrun_policy": payload.text("overrun_policy"), "approved_scopes": payload.strings("approved_scopes"), "allowed_models": payload.strings("allowed_models")})
 		credential := fields(map[string]any{"api_key_id": keyID, "app_connection_id": id, "key_alias": payload.text("key_alias"), "allowed_models": payload.strings("allowed_models"), "status": "active"})
 		connection.set("active_key", credential)
 		backend.connections[id] = connection
@@ -390,9 +431,9 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 				delete(backend.caps, id)
 			}
 		}
-	case path == "/orgs/org_a/apps/app_a/routing-keys":
+	case path == "/orgs/org_a/apps/"+backend.app.text("app_id")+"/routing-keys":
 		id := fmt.Sprintf("router_%d", len(backend.routers)+1)
-		router := fields(map[string]any{"api_key_id": id, "app_id": "app_a", "org_id": "org_a", "status": "active", "key_alias": payload.text("key_alias")})
+		router := fields(map[string]any{"api_key_id": id, "app_id": backend.app.text("app_id"), "org_id": "org_a", "status": "active", "key_alias": payload.text("key_alias")})
 		backend.setMembers(router, payload)
 		backend.routers[id] = router
 		response = map[string]any{"routing_key": router, "api_key": "private-routing-secret"}
@@ -421,6 +462,11 @@ func (backend *fakeBackend) serve(writer http.ResponseWriter, request *http.Requ
 		backend.changeConfig = ""
 	}
 	if backend.loseCreateResponse && path == "/apps" {
+		_, _ = io.WriteString(writer, "{")
+		return
+	}
+	if path == backend.loseDestroyResponsePath {
+		backend.loseDestroyResponsePath = ""
 		_, _ = io.WriteString(writer, "{")
 		return
 	}

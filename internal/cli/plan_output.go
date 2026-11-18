@@ -13,8 +13,15 @@ import (
 
 func formatPlan(result provision.PlanResult, color bool) string {
 	var output strings.Builder
+	if result.Resuming {
+		output.WriteString("Resuming the saved destroy plan. Completed steps will be skipped.\n\n")
+	}
 	if len(result.Changes) == 0 {
-		output.WriteString("No changes. Your configuration matches Zorveus.\n")
+		if result.Destroy {
+			output.WriteString("Nothing left to destroy.\n")
+		} else {
+			output.WriteString("No changes. Your configuration matches Zorveus.\n")
+		}
 		fmt.Fprintf(&output, "\nSaved plan: %s\n", terminalText(result.Plan))
 		return output.String()
 	}
@@ -68,6 +75,8 @@ func planAction(step provision.Step) (string, string) {
 		return "+", "will be created"
 	case strings.HasPrefix(step.Kind, "revoke_"):
 		return "-", "will be revoked"
+	case strings.HasPrefix(step.Kind, "delete_"):
+		return "-", "will be deleted"
 	case step.Kind == "app_redirect_remove", step.Kind == "key_cap" && step.After == nil:
 		return "-", "will be removed"
 	case step.Kind == "key_cap" && step.Before == nil:
@@ -90,9 +99,9 @@ func planAddress(step provision.Step) string {
 		kind = "inference_key"
 	case strings.HasPrefix(step.Kind, "router_"), step.Kind == "create_router", step.Kind == "revoke_router":
 		kind = "routing_key"
-	case strings.HasPrefix(step.Kind, "service_"), step.Kind == "create_service":
+	case strings.HasPrefix(step.Kind, "service_"), step.Kind == "create_service", step.Kind == "revoke_service":
 		kind = "service_key"
-	case strings.HasPrefix(step.Kind, "provider_"), step.Kind == "create_provider":
+	case strings.HasPrefix(step.Kind, "provider_"), step.Kind == "create_provider", step.Kind == "delete_provider":
 		kind = "provider_credential"
 	}
 	if kind == "app" {

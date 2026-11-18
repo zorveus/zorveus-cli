@@ -18,8 +18,8 @@ type secretResource struct {
 	item, kind, ref, id string
 }
 
-func (service *Service) Retrieve(ctx context.Context, origin, config, item string) (RetrievedSecret, error) {
-	config, err := filepath.Abs(config)
+func (service *Service) Retrieve(ctx context.Context, origin, config, item string) (result RetrievedSecret, err error) {
+	config, err = filepath.Abs(config)
 	if err != nil {
 		return RetrievedSecret{}, storageError()
 	}
@@ -28,10 +28,15 @@ func (service *Service) Retrieve(ctx context.Context, origin, config, item strin
 		return RetrievedSecret{}, err
 	}
 	defer unlock()
+	service, close, err := service.openWorkspace(ctx, config, nil)
+	if err != nil {
+		return RetrievedSecret{}, err
+	}
+	defer closeWorkspace(close, &err)
 	if err := requireFinishedApply(config); err != nil {
 		return RetrievedSecret{}, err
 	}
-	desired, _, _, err := loadManifest(config)
+	desired, _, _, err := service.resolvedManifest(config)
 	if err != nil {
 		return RetrievedSecret{}, err
 	}

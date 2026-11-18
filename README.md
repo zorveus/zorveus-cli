@@ -261,6 +261,10 @@ See the [manifest reference](docs/manifest-v1.md) for OAuth settings, consent de
 
 ## Review and apply changes
 
+For shared state across machines or runners, configure an [S3-compatible state backend](docs/durable-state.md). It stores managed IDs and apply progress with conditional locking. The default remains local state. Durable state does not include login tokens or generated secrets.
+
+To remove a deployment, use [`zorveus destroy`](docs/destroy.md). It previews app deletion, key revocations, cap removal, and removal of all listed service keys and provider credentials before asking for confirmation.
+
 ```sh
 zorveus plan --config zorveus.json
 ```
@@ -520,6 +524,8 @@ Login requires an interactive terminal and browser consent. Other commands can u
 | `setup` | Configure customer allowance plans and optional routing, review, and apply resources |
 | `retrieve` | Print a saved secret by manifest reference or resource ID |
 | `plan`, `apply` | Review and apply configuration changes |
+| `destroy` | Preview and confirm app deletion and revocation of all listed credentials |
+| `state init`, `state inspect`, `state pull`, `state unlock` | Initialize and manage durable provisioning state |
 | `import` | Adopt an existing app into a manifest |
 | `clone` | Prepare a separate app configuration |
 | `promote` | Update a target JSON locally with source settings and target IDs |

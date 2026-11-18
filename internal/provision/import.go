@@ -22,11 +22,11 @@ type ImportResult struct {
 	Routers int    `json:"routing_keys"`
 }
 
-func (service *Service) Import(ctx context.Context, origin, appID, config string) (ImportResult, error) {
+func (service *Service) Import(ctx context.Context, origin, appID, config string) (result ImportResult, err error) {
 	if !resourceID.MatchString(appID) {
 		return ImportResult{}, problem.New("invalid_app_id", "Provide an existing app ID with --app-id.", 2)
 	}
-	config, err := filepath.Abs(config)
+	config, err = filepath.Abs(config)
 	if err != nil {
 		return ImportResult{}, storageError()
 	}
@@ -35,6 +35,11 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 		return ImportResult{}, err
 	}
 	defer unlock()
+	service, close, err := service.openWorkspace(ctx, config, nil)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	defer closeWorkspace(close, &err)
 	if err := requireNewImport(config); err != nil {
 		return ImportResult{}, err
 	}
@@ -55,6 +60,9 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 		return ImportResult{}, err
 	}
 	document := fields(map[string]any{"version": 1, "organizationId": remote.target.Org, "app": importedApp(app), "keys": map[string]Fields{}, "routingKeys": map[string]Fields{}})
+	if service.workspace != nil {
+		document.set("_state", service.workspace.config)
+	}
 	importedKeys := map[string]Fields{}
 	state := State{Version: 1, Target: remote.target, AppID: appID, Keys: map[string]string{}, Routers: []string{}}
 	for _, key := range keys {
@@ -83,6 +91,12 @@ func (service *Service) Import(ctx context.Context, origin, appID, config string
 	data := encoded(document)
 	if _, err := manifest.Parse(data); err != nil {
 		return ImportResult{}, err
+	}
+	if workspace := service.workspace; workspace != nil {
+		workspace.snapshot.State, workspace.snapshot.Manifest = &state, data
+		if err := workspace.session.Save(ctx, encoded(workspace.snapshot)); err != nil {
+			return ImportResult{}, err
+		}
 	}
 	if err := writeNew(statePath(config), encoded(state)); err != nil {
 		return ImportResult{}, err

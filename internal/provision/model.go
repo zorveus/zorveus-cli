@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zorveus/zorveus-cli/internal/problem"
+	"github.com/zorveus/zorveus-cli/internal/statestore"
 )
 
 type Fields map[string]json.RawMessage
@@ -110,27 +111,34 @@ type Target struct {
 }
 
 type Plan struct {
-	Version      int               `json:"version"`
-	ID           string            `json:"id"`
-	Target       Target            `json:"target"`
-	Config       string            `json:"config"`
-	ConfigDigest string            `json:"config_digest"`
-	StateDigest  string            `json:"state_digest"`
-	Manifest     json.RawMessage   `json:"manifest"`
-	Source       string            `json:"source_config,omitempty"`
-	SourceDigest string            `json:"source_config_digest,omitempty"`
-	KeepNames    bool              `json:"keep_names,omitempty"`
-	Steps        []Step            `json:"steps"`
-	Scopes       []string          `json:"required_scopes"`
-	Bindings     map[string]string `json:"bindings"`
+	Destroy        bool               `json:"destroy,omitempty"`
+	DestroyedIDs   []string           `json:"destroyed_resource_ids,omitempty"`
+	Version        int                `json:"version"`
+	ID             string             `json:"id"`
+	Target         Target             `json:"target"`
+	Config         string             `json:"config"`
+	ConfigDigest   string             `json:"config_digest"`
+	StateDigest    string             `json:"state_digest"`
+	Manifest       json.RawMessage    `json:"manifest"`
+	Source         string             `json:"source_config,omitempty"`
+	SourceDigest   string             `json:"source_config_digest,omitempty"`
+	KeepNames      bool               `json:"keep_names,omitempty"`
+	Steps          []Step             `json:"steps"`
+	Scopes         []string           `json:"required_scopes"`
+	Bindings       map[string]string  `json:"bindings"`
+	RemoteStateID  string             `json:"remote_state_id,omitempty"`
+	RemoteRevision uint64             `json:"remote_revision,omitempty"`
+	StateBackend   *statestore.Config `json:"state_backend,omitempty"`
 }
 
 type State struct {
-	Version int               `json:"version"`
-	Target  Target            `json:"target"`
-	AppID   string            `json:"app_id"`
-	Keys    map[string]string `json:"keys"`
-	Routers []string          `json:"routing_keys"`
+	Destroyed    bool              `json:"destroyed,omitempty"`
+	DestroyedIDs []string          `json:"destroyed_resource_ids,omitempty"`
+	Version      int               `json:"version"`
+	Target       Target            `json:"target"`
+	AppID        string            `json:"app_id"`
+	Keys         map[string]string `json:"keys"`
+	Routers      []string          `json:"routing_keys"`
 }
 
 type Progress struct {
@@ -153,6 +161,9 @@ type Journal struct {
 }
 
 type PlanResult struct {
+	Destroy        bool     `json:"destroy,omitempty"`
+	Resuming       bool     `json:"resuming,omitempty"`
+	Target         *Target  `json:"target,omitempty"`
 	Plan           string   `json:"plan"`
 	Operations     int      `json:"operations"`
 	Changes        []Step   `json:"changes"`
@@ -160,6 +171,7 @@ type PlanResult struct {
 }
 
 type ApplyResult struct {
+	Destroyed          bool     `json:"destroyed,omitempty"`
 	Operation          string   `json:"operation"`
 	Config             string   `json:"config"`
 	AppID              string   `json:"app_id"`

@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-	"github.com/zorveus/zorveus-cli/internal/provision"
 )
 
 func importCommand(settings *flags, dependencies Dependencies, stdout io.Writer) *cobra.Command {
@@ -13,7 +12,7 @@ func importCommand(settings *flags, dependencies Dependencies, stdout io.Writer)
 	command := &cobra.Command{
 		Use: "import", Short: "Read an existing app into a new manifest", Args: noArguments,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			service := provision.Service{Auth: dependencies.Auth}
+			service := provisionService(settings, dependencies)
 			result, err := service.Import(command.Context(), settings.apiOrigin, appID, config)
 			if err != nil {
 				return err
@@ -36,7 +35,7 @@ func statusCommand(settings *flags, dependencies Dependencies, stdout io.Writer)
 	command := &cobra.Command{
 		Use: "status", Short: "Read resource state, configuration drift, and the last apply result", Args: noArguments,
 		RunE: func(command *cobra.Command, arguments []string) error {
-			service := provision.Service{Auth: dependencies.Auth}
+			service := provisionService(settings, dependencies)
 			result, err := service.Status(command.Context(), settings.apiOrigin, config)
 			if err != nil {
 				return err

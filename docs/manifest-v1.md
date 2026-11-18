@@ -12,6 +12,8 @@ The optional root field `organizationId` identifies the organization that owns t
 
 Clone removes `organizationId` along with resource IDs. Promotion preserves the target organization's ID and never copies the source organization's ID.
 
+The optional root `_state` object configures a durable backend. S3 backends require `backend: "s3"`, `bucket`, and `key`; optional fields are `region`, `endpoint`, and `usePathStyle`. Credentials use the AWS SDK credential chain. Clone removes `_state`, and promotion preserves the target's backend. With durable state, missing IDs are resolved from the last applied manifest by resource object name. Explicit conflicting IDs are rejected. See [Share state through S3-compatible storage](durable-state.md).
+
 IDs contain 1 to 128 ASCII letters, digits, underscores, or hyphens, starting with a letter or digit. They are opaque resource identifiers. Offline validation checks syntax and duplicates. Later planning must verify the resource kind, existence, app, and organization. App-owned IDs require an existing `app.id`.
 
 An omitted ID requests creation. An explicit null or empty ID is invalid. A new app requires `name` and `allowedModels`. A new key requires `name`. A new router requires `name` and at least one member. Existing resources can omit display names to preserve them. Display names never identify resources.

@@ -29,6 +29,11 @@ func (remote *gateway) providerInputChanged(current api.ProviderCredential, vari
 	if !exists || strings.TrimSpace(value) == "" {
 		return true, nil
 	}
+	if workspace := remote.service.workspace; workspace != nil && current.VersionID != nil {
+		if previous, found := workspace.snapshot.ProviderFingerprints[current.ID]; found {
+			return previous.VersionID != *current.VersionID || previous.Fingerprint != providerFingerprint(value, kind), nil
+		}
+	}
 	saved, err := remote.service.secretStore().Load(providerAccount(remote.target, current.ID))
 	if secretMissing(err) {
 		return true, nil
@@ -53,6 +58,15 @@ func (run *execution) prepareProviderInputs() error {
 		}
 		account := run.plan.ID + "/" + step.Ref + "/input"
 		fingerprint := providerFingerprint(run.inputs[step.SecretEnv], step.SecretKind)
+		if workspace := run.remote.service.workspace; workspace != nil {
+			if workspace.snapshot.InputFingerprints == nil {
+				workspace.snapshot.InputFingerprints = map[string]string{}
+			}
+			if previous, exists := workspace.snapshot.InputFingerprints[account]; exists && previous != fingerprint {
+				return problem.New("secret_input_changed", "A provider secret input changed during this durable apply. Restore the original environment value before resuming.", 4)
+			}
+			workspace.snapshot.InputFingerprints[account] = fingerprint
+		}
 		saved, err := run.secrets.Load(account)
 		if err == nil {
 			if saved.ResourceID != step.Ref || saved.Secret != fingerprint {
@@ -85,5 +99,14 @@ func (run *execution) rememberProvider(step Step, id, version string) error {
 	if err != nil {
 		return err
 	}
-	return run.secrets.Save(providerAccount(run.plan.Target, id), Credential{ResourceID: id, CredentialID: version, Secret: saved.Secret})
+	if err := run.secrets.Save(providerAccount(run.plan.Target, id), Credential{ResourceID: id, CredentialID: version, Secret: saved.Secret}); err != nil {
+		return err
+	}
+	if workspace := run.remote.service.workspace; workspace != nil {
+		if workspace.snapshot.ProviderFingerprints == nil {
+			workspace.snapshot.ProviderFingerprints = map[string]providerFingerprintRecord{}
+		}
+		workspace.snapshot.ProviderFingerprints[id] = providerFingerprintRecord{VersionID: version, Fingerprint: saved.Secret}
+	}
+	return nil
 }

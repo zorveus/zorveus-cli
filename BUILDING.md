@@ -52,6 +52,8 @@ python3 scripts/test_installer.py
 
 Unit tests use injected credential stores and local HTTP servers. They do not need a running Zorveus backend or modify your real OS credential store. Live verification uses real backend resources and credentials and requires separate setup.
 
+Durable-state tests sign S3 requests against an in-memory HTTP transport and exercise conditional writes, stale lock owners, retained locks after lost responses, fresh-runner ID restoration, provider fingerprints, and interrupted apply recovery. They do not read real AWS credentials or write to a live bucket.
+
 MCP tests exercise SDK client/server sessions and the CLI's stdio transport. They verify discovery, account inspection, manifest creation and copying, import, service-key revocation, saved-plan apply, retry behavior, and exclusion of credentials from responses and logs. The adapter is in `internal/mcpserver`; terminal registration is in `internal/cli/mcp.go`.
 
 Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, cleanup, and shell completion setup. Completion tests use an executable fixture and temporary home directories. They check startup-file preservation, repeat installs, custom configuration paths, opt-out, and shell registration without changing your real shell configuration.

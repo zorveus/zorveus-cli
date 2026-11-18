@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,7 +20,20 @@ import (
 )
 
 func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
-func newID() string             { return rand.Text() }
+
+func absolutePlanPath(value string) bool {
+	value = strings.ReplaceAll(value, "\\", "/")
+	if path.IsAbs(value) {
+		return true
+	}
+	if len(value) < 3 || value[1] != ':' || value[2] != '/' {
+		return false
+	}
+	return value[0] >= 'A' && value[0] <= 'Z' || value[0] >= 'a' && value[0] <= 'z'
+}
+
+func planFilename(value string) string { return path.Base(strings.ReplaceAll(value, "\\", "/")) }
+func newID() string                    { return rand.Text() }
 func encoded(value any) []byte {
 	result, _ := json.MarshalIndent(value, "", "  ")
 	return append(result, '\n')
@@ -46,7 +60,7 @@ func requireFinishedApply(config string) error {
 		if err != nil {
 			return err
 		}
-		if journal.Config == config && !journal.Complete {
+		if planFilename(journal.Config) == filepath.Base(config) && !journal.Complete {
 			return problem.New("apply_pending", "This manifest has an unfinished apply. Resume its saved plan and inspect the local journal before making another plan.", 5)
 		}
 	}

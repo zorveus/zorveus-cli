@@ -39,6 +39,7 @@ type ApplyStatus struct {
 }
 
 type StatusResult struct {
+	Destroyed bool             `json:"destroyed,omitempty"`
 	Config    string           `json:"config"`
 	Target    Target           `json:"target"`
 	InSync    bool             `json:"in_sync"`
@@ -46,12 +47,29 @@ type StatusResult struct {
 	LastApply *ApplyStatus     `json:"last_apply,omitempty"`
 }
 
-func (service *Service) Status(ctx context.Context, origin, config string) (StatusResult, error) {
-	config, err := filepath.Abs(config)
+func (service *Service) Status(ctx context.Context, origin, config string) (result StatusResult, err error) {
+	config, err = filepath.Abs(config)
 	if err != nil {
 		return StatusResult{}, storageError()
 	}
-	desired, _, _, err := loadManifest(config)
+	backend, err := service.backendConfig(config, nil)
+	if err != nil {
+		return StatusResult{}, err
+	}
+	if backend != nil {
+		unlock, lockErr := lockConfig(ctx, config)
+		if lockErr != nil {
+			return StatusResult{}, lockErr
+		}
+		defer unlock()
+		var close func() error
+		service, close, err = service.openWorkspace(ctx, config, backend)
+		if err != nil {
+			return StatusResult{}, err
+		}
+		defer closeWorkspace(close, &err)
+	}
+	desired, _, _, err := service.resolvedManifest(config)
 	if err != nil {
 		return StatusResult{}, err
 	}
@@ -71,7 +89,12 @@ func (service *Service) Status(ctx context.Context, origin, config string) (Stat
 	if err != nil {
 		return StatusResult{}, err
 	}
-	result := StatusResult{Config: config, Target: remote.target, InSync: true, Resources: []ResourceStatus{}, LastApply: last}
+	result = StatusResult{Config: config, Target: remote.target, InSync: true, Resources: []ResourceStatus{}, LastApply: last}
+	if state.Destroyed {
+		result.Destroyed, result.InSync = true, false
+		result.Resources = append(result.Resources, ResourceStatus{Ref: "app", ID: state.AppID, Status: "destroyed", Changes: []FieldChange{}, Notes: []string{"This deployment is recorded as destroyed. Run plan and apply with this manifest to create it again."}})
+		return result, nil
+	}
 	app, appStatus, err := inspectApp(remote, desired.App)
 	if err != nil {
 		return StatusResult{}, err

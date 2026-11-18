@@ -29,6 +29,10 @@ type execution struct {
 }
 
 func (service *Service) Apply(ctx context.Context, origin, path string, accepted, allowDelete bool) (ApplyResult, error) {
+	return service.ApplyAt(ctx, origin, path, "", accepted, allowDelete)
+}
+
+func (service *Service) ApplyAt(ctx context.Context, origin, path, config string, accepted, allowDelete bool) (result ApplyResult, err error) {
 	if !accepted {
 		return ApplyResult{}, problem.New("acceptance_required", "Review the saved plan, then pass --yes to apply it.", 2)
 	}
@@ -37,9 +41,39 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	if !exists || plan.Version != 1 || !operationID.MatchString(plan.ID) || !filepath.IsAbs(plan.Config) {
+	if !exists || plan.Version != 1 || !operationID.MatchString(plan.ID) || !absolutePlanPath(plan.Config) {
 		return ApplyResult{}, problem.New("invalid_plan", "Provide a valid saved plan created by zorveus plan.", 2)
 	}
+	if config != "" {
+		if plan.RemoteStateID == "" {
+			return ApplyResult{}, problem.New("invalid_plan", "Relocating a saved plan requires a durable-state plan. Create a new plan for this directory.", 4)
+		}
+		absolute, err := filepath.Abs(config)
+		if err != nil {
+			return ApplyResult{}, storageError()
+		}
+		plan = relocatePlan(plan, absolute)
+	}
+	if !filepath.IsAbs(plan.Config) {
+		return ApplyResult{}, problem.New("manifest_required", "This plan was saved on another operating system. Supply --config with the manifest path in this checkout.", 2)
+	}
+	if _, err := os.Stat(plan.Config); os.IsNotExist(err) && plan.RemoteStateID != "" {
+		return ApplyResult{}, problem.New("manifest_required", "The saved manifest path is not available on this runner. Supply --config with the manifest path in this checkout.", 2)
+	}
+	unlock, err := lockConfig(ctx, plan.Config)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	defer unlock()
+	service, close, err := service.openWorkspace(ctx, plan.Config, plan.StateBackend)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	defer closeWorkspace(close, &err)
+	return service.applyPlan(ctx, origin, plan, allowDelete)
+}
+
+func (service *Service) applyPlan(ctx context.Context, origin string, plan Plan, allowDelete bool) (ApplyResult, error) {
 	document, err := manifest.Parse(plan.Manifest)
 	if err != nil {
 		return ApplyResult{}, problem.New("invalid_plan", "The saved plan contains an invalid manifest.", 2)
@@ -62,11 +96,18 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 	if !allowDelete && slices.ContainsFunc(plan.Steps, func(step Step) bool { return step.Destructive && stepChanges(step) }) {
 		return ApplyResult{}, problem.New("destructive_acceptance_required", "This plan includes revocation, cap removal, or redirect removal. Pass --allow-delete as well as --yes after reviewing it.", 2)
 	}
-	unlock, err := lockConfig(ctx, plan.Config)
-	if err != nil {
-		return ApplyResult{}, err
+	if workspace := service.workspace; workspace != nil {
+		if plan.RemoteStateID != workspace.session.Document.ID {
+			return ApplyResult{}, conflict()
+		}
+		operation := workspace.snapshot.Operation
+		resuming := operation != nil && operation.Plan.ID == plan.ID
+		if !resuming && plan.RemoteRevision != workspace.session.Document.Revision {
+			return ApplyResult{}, conflict()
+		}
+	} else if plan.RemoteStateID != "" {
+		return ApplyResult{}, conflict()
 	}
-	defer unlock()
 	remote := &gateway{ctx: ctx, service: service, target: plan.Target}
 	if err := remote.identify(); err != nil {
 		return ApplyResult{}, err
@@ -74,12 +115,12 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 	if err := remote.call(plan.Scopes, func(*api.Client, auth.Login) error { return nil }); err != nil {
 		return ApplyResult{}, err
 	}
-	journal := Journal{Version: 1, Config: plan.Config, PlanDigest: digest(encoded(plan)), Steps: make([]Progress, len(plan.Steps))}
+	journal := Journal{Version: 1, Config: plan.Config, PlanDigest: planDigest(plan), Steps: make([]Progress, len(plan.Steps))}
 	resuming, _, err := loadJSON(journalPath(plan), &journal)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	if journal.Version != 1 || journal.Config != plan.Config || journal.PlanDigest != digest(encoded(plan)) || len(journal.Steps) != len(plan.Steps) {
+	if journal.Version != 1 || journal.Config != plan.Config || journal.PlanDigest != planDigest(plan) || len(journal.Steps) != len(plan.Steps) {
 		return ApplyResult{}, conflict()
 	}
 	current, err := os.ReadFile(plan.Config)
@@ -90,16 +131,30 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 		if digest(current) != journal.FinalDigest {
 			return ApplyResult{}, conflict()
 		}
+		result := applyResult(plan, journal)
+		state, _, err := readState(plan.Config, plan.Target, result.AppID)
+		if err != nil {
+			return ApplyResult{}, err
+		}
+		if state.AppID != "" && state.Destroyed != plan.Destroy {
+			return ApplyResult{}, conflict()
+		}
 		if err := service.rememberCredentials(plan, journal, true); err != nil {
 			return ApplyResult{}, err
 		}
-		return applyResult(plan, journal), nil
+		return result, nil
 	}
 	if !resuming {
 		if err := requireFinishedApply(plan.Config); err != nil {
 			return ApplyResult{}, err
 		}
-		fresh, err := service.buildFrom(ctx, plan.Target.Origin, plan.Config, plan.Source, plan.KeepNames)
+		var fresh Plan
+		var err error
+		if plan.Destroy {
+			fresh, err = service.buildDestroy(ctx, plan.Target.Origin, plan.Config)
+		} else {
+			fresh, err = service.buildFrom(ctx, plan.Target.Origin, plan.Config, plan.Source, plan.KeepNames)
+		}
 		if err != nil {
 			return ApplyResult{}, err
 		}
@@ -154,6 +209,12 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 	if err := service.rememberCredentials(plan, run.journal, false); err != nil {
 		return ApplyResult{}, err
 	}
+	if plan.Destroy {
+		if err := run.finishDestroy(); err != nil {
+			return ApplyResult{}, err
+		}
+		return applyResult(plan, run.journal), nil
+	}
 	if err := run.finish(); err != nil {
 		return ApplyResult{}, err
 	}
@@ -161,6 +222,15 @@ func (service *Service) Apply(ctx context.Context, origin, path string, accepted
 }
 
 func samePlan(left, right Plan) bool {
+	if left.Destroy != right.Destroy {
+		return false
+	}
+	if !slices.Equal(left.DestroyedIDs, right.DestroyedIDs) {
+		return false
+	}
+	if left.RemoteStateID != right.RemoteStateID || left.RemoteRevision != right.RemoteRevision || !reflect.DeepEqual(left.StateBackend, right.StateBackend) {
+		return false
+	}
 	if left.Source != right.Source || left.SourceDigest != right.SourceDigest || left.KeepNames != right.KeepNames {
 		return false
 	}
@@ -183,7 +253,15 @@ func samePlan(left, right Plan) bool {
 	return true
 }
 
-func (run *execution) save() error { return replaceFile(journalPath(run.plan), encoded(run.journal)) }
+func (run *execution) save() error {
+	if err := replaceFile(journalPath(run.plan), encoded(run.journal)); err != nil {
+		return err
+	}
+	if workspace := run.remote.service.workspace; workspace != nil {
+		return workspace.checkpoint(run.remote.ctx, run.plan, run.journal)
+	}
+	return nil
+}
 func (run *execution) id(ref string) string {
 	if strings.HasPrefix(ref, "id:") {
 		return strings.TrimPrefix(ref, "id:")
@@ -198,6 +276,9 @@ func (run *execution) id(ref string) string {
 
 func (run *execution) step(index int, step Step) error {
 	progress := &run.journal.Steps[index]
+	if run.plan.Destroy {
+		return run.destroyStep(index, step)
+	}
 	if step.Kind == "provider_secret" {
 		return run.rotateProvider(index, step)
 	}
@@ -347,6 +428,10 @@ func (run *execution) finish() error {
 	if err != nil {
 		return err
 	}
+	if state.Destroyed {
+		state.Keys, state.Routers = map[string]string{}, []string{}
+	}
+	state.Destroyed, state.DestroyedIDs = false, nil
 	state.AppID = run.id("app")
 	state.Target = run.plan.Target
 	if desired.Keys != nil {
@@ -402,6 +487,10 @@ func (run *execution) finish() error {
 		return problem.New("config_changed", "Remote changes completed, but the manifest changed. Your edits were preserved. Inspect the local apply journal for returned IDs before creating a new plan.", 4)
 	}
 	run.journal.FinalDigest = digest(final)
+	if workspace := run.remote.service.workspace; workspace != nil {
+		workspace.snapshot.Manifest = final
+		workspace.snapshot.State = &state
+	}
 	if err := run.save(); err != nil {
 		return err
 	}
@@ -412,11 +501,14 @@ func (run *execution) finish() error {
 		return err
 	}
 	run.journal.Complete = true
+	if workspace := run.remote.service.workspace; workspace != nil {
+		workspace.snapshot.InputFingerprints = nil
+	}
 	return run.save()
 }
 
 func applyResult(plan Plan, journal Journal) ApplyResult {
-	result := ApplyResult{Operation: plan.ID, Config: plan.Config, CredentialAccounts: []string{}}
+	result := ApplyResult{Operation: plan.ID, Config: plan.Config, Destroyed: plan.Destroy, CredentialAccounts: []string{}}
 	for index, progress := range journal.Steps {
 		if progress.Done {
 			result.Completed++

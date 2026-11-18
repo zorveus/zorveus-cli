@@ -15,14 +15,17 @@ import (
 	"github.com/zorveus/zorveus-cli/internal/manifest"
 	"github.com/zorveus/zorveus-cli/internal/problem"
 	"github.com/zorveus/zorveus-cli/internal/provision"
+	"github.com/zorveus/zorveus-cli/internal/statestore"
 )
 
 type Options struct {
-	Auth      *auth.Service
-	Secrets   provision.SecretStore
-	APIOrigin string
-	Directory string
-	Logger    *slog.Logger
+	Auth           *auth.Service
+	Secrets        provision.SecretStore
+	APIOrigin      string
+	Directory      string
+	Logger         *slog.Logger
+	StateConfig    *statestore.Config
+	BackendFactory statestore.Factory
 }
 
 type adapter struct {
@@ -51,7 +54,7 @@ func New(options Options) (*mcp.Server, error) {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	tools := &adapter{
-		service: provision.Service{Auth: options.Auth, Secrets: options.Secrets},
+		service: provision.Service{Auth: options.Auth, Secrets: options.Secrets, StateConfig: options.StateConfig, BackendFactory: options.BackendFactory},
 		origin:  options.APIOrigin, directory: directory, logger: logger,
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "zorveus", Version: "1"}, &mcp.ServerOptions{

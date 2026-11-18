@@ -2,6 +2,7 @@ package provision
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -61,7 +62,7 @@ func FindSetupConfigurations(config string, target Target) ([]SetupConfiguration
 		if _, _, err := loadJSON(filepath.Join(directory(absolute), entry.Name()), &state); err != nil {
 			continue
 		}
-		if state.Version != 1 || state.Target.Origin != target.Origin || state.Target.Org != target.Org || !resourceID.MatchString(state.AppID) {
+		if state.Destroyed || state.Version != 1 || state.Target.Origin != target.Origin || state.Target.Org != target.Org || !resourceID.MatchString(state.AppID) {
 			continue
 		}
 		candidate := filepath.Join(filepath.Dir(absolute), name)
@@ -93,6 +94,15 @@ func ArchiveSetupState(ctx context.Context, config string, target Target, expect
 			return "", err
 		}
 		appID = desired.App.text("id")
+		var document Fields
+		data, readErr := os.ReadFile(config)
+		if readErr != nil || json.Unmarshal(data, &document) != nil {
+			return "", storageError()
+		}
+		_, receiptErr := os.Lstat(filepath.Join(directory(config), filepath.Base(config)+".backend.json"))
+		if document.has("_state") || receiptErr == nil {
+			return "", problem.New("durable_state_reset_required", "This manifest uses durable state. Local setup recovery cannot reset shared resource IDs. Use a new backend key and a separate manifest for a new app, or keep the existing app's IDs.", 4)
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", storageError()
 	}
