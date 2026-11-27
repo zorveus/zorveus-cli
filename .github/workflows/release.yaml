@@ -34,6 +34,16 @@ jobs:
       - name: Verify updates on this operating system
         run: go test ./internal/selfupdate
 
+      - name: Test the Windows installer in PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test_windows_installer.ps1
+
+      - name: Test the Windows installer in Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/test_windows_installer.ps1
+
   release:
     needs: check-updater
     runs-on: ubuntu-24.04
@@ -91,6 +101,7 @@ jobs:
 
           gh release create "$RELEASE_VERSION" \
             "$bundle/install.sh" \
+            "$bundle/install.ps1" \
             "$bundle/cli/latest" \
             "$binaries/SHA256SUMS" \
             "$binaries"/zorveus-* \

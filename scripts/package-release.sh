@@ -35,6 +35,7 @@ sh scripts/check-release-builds.sh
 binary_dir="$bundle/cli/$version"
 mkdir -p "$binary_dir"
 cp scripts/install.sh "$bundle/install.sh"
+cp scripts/install.ps1 "$bundle/install.ps1"
 printf '%s\n' "$version" > "$bundle/cli/latest"
 
 for target_os in darwin linux windows; do
@@ -59,4 +60,4 @@ done
 )
 
 printf 'Prepared release website files in %s\n' "$bundle"
-printf 'Publish the version directory first, then install.sh, then cli/latest.\n'
+printf 'Publish the version directory first, then install.sh and install.ps1, then cli/latest.\n'

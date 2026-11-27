@@ -58,6 +58,8 @@ MCP tests exercise SDK client/server sessions and the CLI's stdio transport. The
 
 Installer tests require Python 3. They simulate platform detection and downloads in temporary directories without accessing the network or your installed CLI. Coverage includes supported platforms, pinned versions, checksum rejection, failed updates, cleanup, and shell completion setup. Completion tests use an executable fixture and temporary home directories. They check startup-file preservation, repeat installs, custom configuration paths, opt-out, and shell registration without changing your real shell configuration.
 
+Windows installer tests require Windows PowerShell 5.1 or PowerShell 7. Run `powershell -NoProfile -File scripts/test_windows_installer.ps1` or `pwsh -NoProfile -File scripts/test_windows_installer.ps1`. They use temporary directories and simulated downloads, preserve the real PATH, and never execute the binary fixture. Tests cover HTTPS redirects, processor detection, pinned versions, invalid versions and checksums, failed downloads, repeat installation, and cleanup. On Windows they also verify safe failure when the existing executable is locked. The release workflow runs these tests under both PowerShell versions on Windows.
+
 The `internal/selfupdate` tests simulate HTTPS release responses and replace temporary executables. One test launches a temporary copy of the test binary and updates that running copy. These tests never update your installed CLI or download a release. The release workflow runs them on macOS, Linux, and Windows before publishing.
 
 On Windows, the updater moves the running executable to a `.zorveus-update-old` backup before installing its replacement. If Windows keeps that image locked, the backup remains until a later update removes it. Failed replacement attempts restore the original executable; a failed restore reports the backup path.
@@ -88,13 +90,13 @@ Prepare a website bundle for a release version:
 sh scripts/package-release.sh v0.1.0
 ```
 
-Replace `v0.1.0` with the version being released. The command cross-compiles all six binaries, generates `SHA256SUMS`, and copies the installer into `dist/release-v0.1.0/`. It refuses to overwrite an existing bundle.
+Replace `v0.1.0` with the version being released. The command cross-compiles all six binaries, generates `SHA256SUMS`, and copies both installers into `dist/release-v0.1.0/`. It refuses to overwrite an existing bundle.
 
 For automated releases, the [GitHub Actions workflow](.github/workflows/release.yaml) runs on version-tag pushes, uploads the bundle as a workflow artifact, and publishes its files as GitHub Release assets.
 
 The [release guide](docs/releasing.md) describes tag publication and the frontend's download redirects that connect `zorveus.com` to those assets. The redirects are configured in the website's `next.config.ts`; deploy that website to activate them. Namecheap DNS does not need a change for these paths.
 
-You can also host the local bundle directly by preserving its `install.sh`, `cli/latest`, and `cli/<version>/...` paths. Publish versioned binaries and checksums first, then the installer, then `cli/latest`. Keep old versions available for pinned installs.
+You can also host the local bundle directly by preserving its `install.sh`, `install.ps1`, `cli/latest`, and `cli/<version>/...` paths. Publish versioned binaries and checksums first, then both installers, then `cli/latest`. Keep old versions available for pinned installs.
 
 The shell installer supports macOS and Linux on x86-64 and ARM64. Linux binaries use `CGO_ENABLED=0` and do not require a glibc-specific build. Linux login still needs Secret Service through D-Bus, and downloads need a trusted CA certificate store. Cross-builds and simulated installer tests do not establish runtime compatibility with every Linux distribution.
 

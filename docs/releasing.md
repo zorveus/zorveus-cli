@@ -6,13 +6,14 @@ Namecheap manages the domain's DNS. The live website currently reports Vercel ho
 
 ## Connect the website once
 
-The frontend's `next.config.ts` includes the three CLI download rules in its existing `redirects()` configuration. Deploy the frontend to activate them on `zorveus.com`.
+The frontend's `next.config.ts` includes the four CLI download rules in its existing `redirects()` configuration. Deploy the frontend to activate them on `zorveus.com`.
 
 These rules belong to the website project. The CLI repository needs GitHub Actions, not a Vercel deployment. Namecheap DNS can remain unchanged.
 
 | Public URL | GitHub Release asset |
 | --- | --- |
 | `https://zorveus.com/install.sh` | Latest stable release's `install.sh` |
+| `https://zorveus.com/install.ps1` | Latest stable release's `install.ps1` |
 | `https://zorveus.com/cli/latest` | Latest stable release's `latest` file |
 | `https://zorveus.com/cli/v0.1.0/SHA256SUMS` | Release `v0.1.0`'s `SHA256SUMS` |
 | `https://zorveus.com/cli/v0.1.0/zorveus-linux-amd64` | Release `v0.1.0`'s Linux x86-64 executable |
@@ -30,10 +31,10 @@ The [release workflow](../.github/workflows/release.yaml) runs when a version ta
 The workflow:
 
 1. Checks out the tagged commit, installs the Go version from `go.mod`, and tests self-updating on macOS, Linux, and Windows.
-2. Runs race tests, vet, and installer tests.
+2. Runs race tests, vet, and shell installer tests. Windows installer tests run under Windows PowerShell 5.1 and PowerShell 7 before release packaging.
 3. Builds macOS, Linux, and Windows executables for x86-64 and ARM64.
 4. Verifies the generated checksums and saves the website bundle as an Actions artifact for 14 days.
-5. Uploads the installer, version file, checksums, and six executables to a GitHub Release.
+5. Uploads both installers, the version file, checksums, and six executables to a GitHub Release.
 
 The workflow uses the repository's built-in `GITHUB_TOKEN`. It needs no Namecheap, Vercel, or Zorveus API credentials.
 
@@ -58,6 +59,7 @@ After the website redirects and a stable release are published:
 
 ```sh
 curl -fIL https://zorveus.com/install.sh
+curl -fIL https://zorveus.com/install.ps1
 curl -fsSL https://zorveus.com/cli/latest
 curl -fsSL https://zorveus.com/cli/v0.1.0/SHA256SUMS
 ```
@@ -71,6 +73,16 @@ curl -fsSL https://zorveus.com/install.sh -o install-zorveus.sh
 sh install-zorveus.sh --version v0.1.0 --bin-dir "$PWD/.cli-test/bin"
 ./.cli-test/bin/zorveus --help
 ```
+
+To check the Windows installer in a separate directory, run in PowerShell:
+
+```powershell
+Invoke-WebRequest https://zorveus.com/install.ps1 -OutFile install-zorveus.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-zorveus.ps1 -Version v0.1.0 -BinDir "$PWD\.cli-test\bin"
+& .\.cli-test\bin\zorveus.exe --help
+```
+
+This adds the test directory to your user PATH. Remove that entry through Windows Environment Variables after verification.
 
 Runtime verification, macOS signing and notarization, and Windows signing remain separate release checks. The current workflow cross-compiles unsigned binaries.
 
